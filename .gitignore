@@ -1,0 +1,34 @@
+# ============================================================
+# PAEWS .gitignore
+# ============================================================
+# We track code and small outputs (maps) but NOT large data files.
+# NetCDF files will get very large in Phase 2 when we pull 20 years
+# of baseline data. GitHub has a 100MB file size limit anyway.
+
+# Data files (NetCDF, CSV, etc.)
+data/current/*.nc
+data/baseline/*.nc
+data/processed/*.nc
+*.nc
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE settings
+.vscode/
+.idea/
+
+# Keep the folder structure by tracking .gitkeep files
+!data/current/.gitkeep
+!data/baseline/.gitkeep
+!data/processed/.gitkeep
+!reports/.gitkeep
