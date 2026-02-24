@@ -1,59 +1,35 @@
 """
-PAEWS Phase 2 - Step 1: SST Baseline Builder
-=============================================
+PAEWS Phase 2 - Step 1: SST Baseline Builder (v2)
+===================================================
 Downloads 20 years (2003-2022) of daily SST data from NOAA OISST,
 one year at a time, and saves each year as a separate NetCDF file.
 
-WHY WE NEED THIS:
-To detect anomalies, we need to know what "normal" looks like.
-If February SST off Peru is usually 22C, and today it's 25C,
-that's abnormal. But we can only say that if we have 20+ years
-of February data to compute the average and standard deviation.
+VERSION 2 CHANGES:
+- Extended bounding box from 5S-15S to 0S-16S (captures coastal
+  El Nino hotspot at 0-5S that v1 missed entirely)
+- Extended longitude from 82W-70W to 85W-70W (captures more
+  offshore equatorial water for better gradient computation)
+- Downloads to data/baseline_v2/ to preserve v1 data
+- Clean baseline: 2003-2022 (excludes 2023+ El Nino)
 
-This is called a "climatological baseline" -- the historical
-reference that all future measurements are compared against.
+BOUNDING BOX RATIONALE:
+Literature review confirmed that coastal El Ninos (like 2017)
+concentrate extreme warming (+5C anomalies) in the 0-5S zone.
+Our v1 box at 5S-15S completely missed this. The Nino 1+2 region
+(0-10S, 90W-80W) is the standard monitoring box for coastal Peru
+events. Our new box (0-16S, 85W-70W) overlaps with Nino 1+2
+while also covering the main anchovy fishing grounds (4S-14S).
 
-BASELINE PERIOD RATIONALE (2003-2022):
-We exclude 2023+ from the baseline to prevent El Nino contamination.
-Including event years in the baseline inflates the mean and std,
-which dampens anomaly magnitude and makes events look less extreme.
-This is a standard practice in operational climatology -- the baseline
-must be a "clean" reference period representing normal conditions.
-
-2003-2022 gives us 20 years, which is robust for ocean monitoring
-statistics (Hobday et al. 2016). The WMO recommends 30 years for
-climate normals, but 20 is standard for satellite-era ocean products
-where sensor records are shorter.
-
-WHY YEAR BY YEAR:
-The full 20-year daily dataset is too large to download in one
-request -- the ERDDAP server would time out. So we break it into
-annual chunks. Each year of daily SST for our Peru box is about
-300-400 KB (small because OISST is 0.25 degree resolution).
-
-IMPORTANT: This script will take 10-15 minutes to run because
-it makes 20 separate HTTP requests with pauses between them
-to be polite to the NOAA server. Do not interrupt it.
-
-After this finishes, you will have 20 files:
-  data/baseline/sst_2003.nc
-  data/baseline/sst_2004.nc
-  ...
-  data/baseline/sst_2022.nc
-
-Note: If you previously downloaded 2023-2025 files, they will
-remain on disk but will NOT be used by compute_climatology.py.
-You can keep them for backtesting purposes.
-
-Next step: compute_climatology.py will read all these files
-and compute monthly means and standard deviations.
+IMPORTANT: This script will take 15-20 minutes to run because
+it makes 20 HTTP requests with pauses between them. Each year's
+file is larger than v1 (~500-600 KB) due to the bigger box.
 
 Usage:
   & C:/Users/josep/miniconda3/Scripts/conda.exe run -n geosentinel python c:/Users/josep/Documents/paews/scripts/baseline_builder.py
 """
 
 import sys
-print("PAEWS Baseline Builder starting...", flush=True)
+print("PAEWS Baseline Builder v2 starting...", flush=True)
 
 import xarray as xr
 import requests
@@ -67,27 +43,24 @@ print("Imports done", flush=True)
 # CONFIGURATION
 # ============================================================
 BASE_DIR = Path("c:/Users/josep/Documents/paews")
-DATA_BASELINE = BASE_DIR / "data" / "baseline"
+DATA_BASELINE = BASE_DIR / "data" / "baseline_v2"
 
-# Same Peru bounding box as our data pipeline
-LAT_MIN, LAT_MAX = -16, -4
-LON_MIN, LON_MAX = -82, -70
+# EXTENDED Peru coastal study area bounding box (v2)
+# 0S to 16S latitude, 85W to 70W longitude
+# v1 was 4S to 16S, 82W to 70W -- missed coastal El Nino zone
+LAT_MIN, LAT_MAX = -16, 0
+LON_MIN, LON_MAX = -85, -70
 
-# OISST dataset details (same server and dataset as Phase 1)
+# OISST dataset details
 SST_SERVER = "https://coastwatch.pfeg.noaa.gov"
 SST_DATASET = "ncdcOisst21Agg_LonPM180"
 SST_VARIABLE = "sst"
 
-# Baseline period: 2003 to 2022 (CLEAN -- excludes 2023+ El Nino)
-# We start at 2003 to match MODIS Aqua chlorophyll availability.
-# We end at 2022 to exclude the 2023 El Nino event and its
-# aftermath from the baseline. This prevents future information
-# leakage and keeps the reference period scientifically clean.
-# 20 years is robust for satellite-era ocean monitoring statistics.
+# Clean baseline: 2003-2022 (excludes 2023+ El Nino)
 BASELINE_START_YEAR = 2003
 BASELINE_END_YEAR = 2022
 
-# Pause between downloads (seconds) -- be polite to the server.
+# Pause between downloads (seconds)
 PAUSE_BETWEEN_DOWNLOADS = 3
 
 
@@ -121,18 +94,16 @@ def get_sst_time_range():
 # ============================================================
 def download_sst_year(year, server_max_date=None):
     """
-    Download one full year of daily SST for the Peru box.
+    Download one full year of daily SST for the extended Peru box.
 
-    Each file will contain ~365 daily grids (366 for leap years),
-    each grid being 49 lat x 49 lon pixels at 0.25 degree resolution.
-
-    The data is stored as a 3D array: (time, latitude, longitude)
-    with an additional altitude dimension that we collapse.
+    v2 box is larger than v1:
+      v1: 49 lat x 49 lon = 2,401 pixels per day
+      v2: 65 lat x 61 lon = 3,965 pixels per day
+    Files will be ~50-60% larger than v1.
     """
     start_date = f"{year}-01-01"
     stop_date = f"{year}-12-31"
 
-    # If this is the most recent year, don't request beyond available data
     if server_max_date:
         requested_stop = datetime(year, 12, 31)
         if requested_stop > server_max_date:
@@ -141,7 +112,7 @@ def download_sst_year(year, server_max_date=None):
 
     outfile = DATA_BASELINE / f"sst_{year}.nc"
 
-    # Skip if already downloaded (allows resuming interrupted runs)
+    # Skip if already downloaded
     if outfile.exists():
         try:
             ds = xr.open_dataset(outfile)
@@ -192,9 +163,10 @@ def download_sst_year(year, server_max_date=None):
 # ============================================================
 if __name__ == "__main__":
     print("=" * 55, flush=True)
-    print("PAEWS Baseline Builder - SST Historical Data", flush=True)
+    print("PAEWS Baseline Builder v2 - Extended Box", flush=True)
     print(f"Period: {BASELINE_START_YEAR} to {BASELINE_END_YEAR}", flush=True)
     print(f"Region: {LAT_MIN}N to {LAT_MAX}N, {LON_MIN}E to {LON_MAX}E", flush=True)
+    print(f"Output: {DATA_BASELINE}", flush=True)
     print(f"Dataset: {SST_DATASET}", flush=True)
     print("=" * 55, flush=True)
 
@@ -207,7 +179,7 @@ if __name__ == "__main__":
     failed = []
 
     print(f"\nDownloading {total} years of SST data...", flush=True)
-    print(f"(This will take approximately {total * 30 // 60} - {total * 45 // 60} minutes)\n", flush=True)
+    print(f"(This will take approximately {total * 30 // 60} - {total * 60 // 60} minutes)\n", flush=True)
 
     for i, year in enumerate(years):
         print(f"[{i+1}/{total}] Year {year}...", flush=True)

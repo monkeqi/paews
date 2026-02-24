@@ -1,54 +1,30 @@
 """
-PAEWS Phase 2 - Step 3: SST Anomaly Detector
-==============================================
-Compares current SST data against the monthly climatology to
-detect anomalies using Z-scores.
+PAEWS Anomaly Detector v2
+=========================
+Compares current or historical SST against the 2003-2022 climatology
+to produce Z-score maps, gradient anomalies, and alert classifications.
 
-WHAT IS A Z-SCORE?
-A Z-score tells you how many standard deviations a value is
-from the mean. In plain English:
-  Z = 0    -> perfectly normal
-  Z = +1   -> warmer than 84% of historical values for this month
-  Z = +2   -> warmer than 97.7% (unusual)
-  Z = +3   -> warmer than 99.9% (extreme)
-  Z = -2   -> colder than 97.7% of historical values
+Extended bounding box: 0S-16S, 85W-70W (captures coastal El Nino zone)
+Baseline: baseline_v2/ (2003-2022, clean — no El Nino contamination)
 
-The formula: Z = (current_value - climatological_mean) / climatological_std
+Usage:
+    # Current conditions
+    python anomaly_detector.py
 
-For PAEWS, POSITIVE Z-scores mean WARMER than normal, which is
-BAD for anchovies (suppressed upwelling, reduced nutrients).
-NEGATIVE Z-scores mean COLDER than normal (enhanced upwelling,
-usually good for productivity).
+    # Backtest a specific year (uses Dec 31 snapshot by default)
+    python anomaly_detector.py --backtest 2023
 
-BASELINE REFERENCE:
-Z-scores are computed against a CLEAN 2003-2022 baseline that
-excludes the 2023 El Nino and subsequent years. This prevents
-event contamination from dampening anomaly signals.
+    # Backtest a specific year AND month (e.g., March 2017 coastal El Nino peak)
+    python anomaly_detector.py --backtest 2017 --month 3
 
-ALERT THRESHOLDS (from our seasonal calendar):
-  Feb-Mar (MAXIMUM ALERT):   flag at Z >= +1.5
-  Apr-Jul (ACTIVE SEASON):   flag at Z >= +2.0
-  Aug-Oct (QUIET PERIOD):    flag at Z >= +2.5
-  Nov-Jan (SECONDARY WATCH): flag at Z >= +2.0
-
-This script can run on:
-  1. Current data (from data/current/sst_current.nc)
-  2. Any historical year (for backtesting - e.g., 2023)
-
-OUTPUT:
-  outputs/sst_anomaly_dashboard.png      - dashboard with map + gradient + stats
-  data/processed/sst_anomaly.nc          - Z-score data as NetCDF
-
-Usage (current data):
-  & C:/Users/josep/miniconda3/Scripts/conda.exe run -n geosentinel python c:/Users/josep/Documents/paews/scripts/anomaly_detector.py
-
-Usage (backtest 2023):
-  & C:/Users/josep/miniconda3/Scripts/conda.exe run -n geosentinel python c:/Users/josep/Documents/paews/scripts/anomaly_detector.py --backtest 2023
+    # Backtest with a specific day
+    python anomaly_detector.py --backtest 2017 --month 3 --day 15
 """
 
 import sys
 print("PAEWS Anomaly Detector starting...", flush=True)
 
+import argparse
 import xarray as xr
 import numpy as np
 import matplotlib
@@ -56,451 +32,465 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
+import requests
+import calendar
 
 print("Imports done", flush=True)
 
-# ============================================================
+# =============================================================================
 # CONFIGURATION
-# ============================================================
+# =============================================================================
+
 BASE_DIR = Path("c:/Users/josep/Documents/paews")
+DATA_BASELINE_V2 = BASE_DIR / "data" / "baseline_v2"
 DATA_CURRENT = BASE_DIR / "data" / "current"
-DATA_BASELINE = BASE_DIR / "data" / "baseline"
 DATA_PROCESSED = BASE_DIR / "data" / "processed"
 OUTPUTS = BASE_DIR / "outputs"
 
-LAT_MIN, LAT_MAX = -16, -4
-LON_MIN, LON_MAX = -82, -70
+# Extended bounding box — captures 0S-16S (includes coastal El Nino hotspot)
+LAT_MIN, LAT_MAX = -16, 0
+LON_MIN, LON_MAX = -85, -70
 
-# Alert thresholds by season
-# Keys are month numbers, values are Z-score thresholds
-ALERT_THRESHOLDS = {
-    1:  2.0,   # Jan - Secondary watch
-    2:  1.5,   # Feb - MAXIMUM ALERT (prediction window)
-    3:  1.5,   # Mar - MAXIMUM ALERT (prediction window)
-    4:  2.0,   # Apr - Active season
-    5:  2.0,   # May - Active season
-    6:  2.0,   # Jun - Active season
-    7:  2.0,   # Jul - Active season
-    8:  2.5,   # Aug - Quiet period
-    9:  2.5,   # Sep - Quiet period
-    10: 2.5,   # Oct - Quiet period
-    11: 2.0,   # Nov - Secondary watch
-    12: 2.0,   # Dec - Secondary watch
+# Baseline period (clean — excludes El Nino years)
+BASELINE_START_YEAR = 2003
+BASELINE_END_YEAR = 2022
+
+# Nearshore/offshore split for gradient analysis
+# Nearshore: within ~200km of Peru coast (roughly -78 to -70)
+# Offshore: further out (-85 to -80)
+NEARSHORE_LON = slice(-78, -70)
+OFFSHORE_LON = slice(-85, -80)
+
+# =============================================================================
+# SEASONAL ALERT CALENDAR
+# =============================================================================
+# Different thresholds for different parts of the anchovy season cycle.
+# The first season (Apr-Jul) is the most important — lower thresholds to
+# catch early signals. Secondary season (Nov-Jan) also monitored.
+#
+# Z-score thresholds:
+#   NORMAL:  Z < watch_threshold
+#   WATCH:   watch_threshold <= Z < alert_threshold
+#   WARNING: alert_threshold <= Z < max_alert
+#   ALERT:   Z >= max_alert
+
+SEASON_CALENDAR = {
+    # month: (season_name, watch_threshold, alert_threshold, max_alert)
+    1:  ("PRE-SEASON WATCH",     1.0, 1.5, 2.0),
+    2:  ("PRE-SEASON CRITICAL",  1.0, 1.5, 2.0),
+    3:  ("PRE-SEASON CRITICAL",  1.0, 1.5, 2.0),
+    4:  ("FIRST SEASON",         0.8, 1.2, 1.8),
+    5:  ("FIRST SEASON",         0.8, 1.2, 1.8),
+    6:  ("FIRST SEASON",         0.8, 1.2, 1.8),
+    7:  ("FIRST SEASON END",     1.0, 1.5, 2.0),
+    8:  ("INTER-SEASON",         1.5, 2.0, 2.5),
+    9:  ("INTER-SEASON",         1.5, 2.0, 2.5),
+    10: ("SECONDARY WATCH",      1.2, 1.8, 2.3),
+    11: ("SECONDARY SEASON",     1.0, 1.5, 2.0),
+    12: ("SECONDARY WATCH",      1.2, 1.8, 2.3),
 }
 
-SEASON_NAMES = {
-    1:  "SECONDARY WATCH",
-    2:  "MAXIMUM ALERT",
-    3:  "MAXIMUM ALERT",
-    4:  "ACTIVE SEASON",
-    5:  "ACTIVE SEASON",
-    6:  "ACTIVE SEASON",
-    7:  "ACTIVE SEASON",
-    8:  "QUIET PERIOD",
-    9:  "QUIET PERIOD",
-    10: "QUIET PERIOD",
-    11: "SECONDARY WATCH",
-    12: "SECONDARY WATCH",
-}
+
+def get_season_info(month):
+    """Return season name and thresholds for a given month."""
+    name, watch, alert, max_alert = SEASON_CALENDAR[month]
+    return name, watch, alert, max_alert
 
 
-# ============================================================
-# STEP 1: LOAD CLIMATOLOGY
-# ============================================================
+# =============================================================================
+# DATA LOADING
+# =============================================================================
+
 def load_climatology():
-    """Load the pre-computed monthly climatology."""
-    clim_path = DATA_PROCESSED / "sst_climatology.nc"
+    """Load the v2 climatology (2003-2022, extended box)."""
+    clim_path = DATA_PROCESSED / "sst_climatology_v2.nc"
     if not clim_path.exists():
-        print("ERROR: Climatology file not found!", flush=True)
-        print("  Run compute_climatology.py first.", flush=True)
-        return None
-    clim = xr.open_dataset(clim_path)
-    baseline = clim.attrs.get("baseline_period", "unknown")
-    print(f"  Loaded climatology: {clim_path.name} (baseline: {baseline})", flush=True)
-    return clim
+        # Fall back to v1 if v2 not found
+        clim_path = DATA_PROCESSED / "sst_climatology.nc"
+        if not clim_path.exists():
+            print("  ERROR: No climatology file found. Run compute_climatology.py first.", flush=True)
+            return None
+        print("  WARNING: Using v1 climatology (old bounding box)", flush=True)
+    
+    ds = xr.open_dataset(clim_path)
+    print(f"  Loaded climatology: {clim_path.name}", flush=True)
+    return ds
 
 
-# ============================================================
-# STEP 2: LOAD SST DATA (current or backtest)
-# ============================================================
 def load_current_sst():
-    """Load the most recent SST data from the pipeline."""
+    """Load the most recent SST download."""
     sst_path = DATA_CURRENT / "sst_current.nc"
     if not sst_path.exists():
-        print("ERROR: Current SST file not found!", flush=True)
-        print("  Run data_pipeline.py first.", flush=True)
+        print("  ERROR: No current SST data. Run data_pipeline.py first.", flush=True)
         return None
     ds = xr.open_dataset(sst_path)
-    # Drop altitude/zlev if present
-    if "zlev" in ds.dims:
-        ds = ds.squeeze("zlev", drop=True)
-    if "altitude" in ds.dims:
-        ds = ds.squeeze("altitude", drop=True)
-    print(f"  Loaded current SST: {ds.sizes['time']} days", flush=True)
+    print(f"  Loaded current SST: {ds.dims}", flush=True)
     return ds
+
+
+def download_year_sst(year):
+    """
+    Download a full year of SST data for backtesting.
+    Saves to baseline_v2/ so it can be reused.
+    This handles test years (like 2023) that aren't in the baseline.
+    """
+    outfile = DATA_BASELINE_V2 / f"sst_{year}.nc"
+    if outfile.exists():
+        print(f"  Year {year} already downloaded, loading...", flush=True)
+        return xr.open_dataset(outfile)
+    
+    print(f"  Downloading SST for {year} (not in baseline_v2/, fetching from ERDDAP)...", flush=True)
+    DATA_BASELINE_V2.mkdir(parents=True, exist_ok=True)
+    
+    start_date = f"{year}-01-01"
+    end_date = f"{year}-12-31"
+    
+    url = (
+        "https://coastwatch.pfeg.noaa.gov/erddap/griddap/ncdcOisst21Agg_LonPM180.nc"
+        f"?sst[({start_date}T12:00:00Z):1:({end_date}T12:00:00Z)]"
+        f"[0:1:0]"
+        f"[({LAT_MAX}):1:({LAT_MIN})]"
+        f"[({LON_MIN}):1:({LON_MAX})]"
+    )
+    
+    try:
+        r = requests.get(url, timeout=300)
+        if r.status_code == 200:
+            outfile.write_bytes(r.content)
+            print(f"  Downloaded {len(r.content)/1024:.0f} KB → {outfile.name}", flush=True)
+            return xr.open_dataset(outfile)
+        else:
+            print(f"  ERROR {r.status_code}: {r.text[:300]}", flush=True)
+            return None
+    except requests.exceptions.Timeout:
+        print(f"  ERROR: Download timed out for {year}", flush=True)
+        return None
 
 
 def load_backtest_sst(year):
-    """Load a historical year for backtesting."""
-    sst_path = DATA_BASELINE / f"sst_{year}.nc"
-    if not sst_path.exists():
-        print(f"ERROR: Baseline file for {year} not found!", flush=True)
-        return None
-    ds = xr.open_dataset(sst_path)
-    if "zlev" in ds.dims:
-        ds = ds.squeeze("zlev", drop=True)
-    if "altitude" in ds.dims:
-        ds = ds.squeeze("altitude", drop=True)
-    print(f"  Loaded backtest SST for {year}: {ds.sizes['time']} days", flush=True)
-    return ds
+    """
+    Load SST data for a backtest year.
+    First checks baseline_v2/, then tries to download if not found.
+    """
+    # Check baseline_v2 first
+    sst_path = DATA_BASELINE_V2 / f"sst_{year}.nc"
+    if sst_path.exists():
+        ds = xr.open_dataset(sst_path)
+        n_times = ds.sizes.get('time', 0)
+        print(f"  Loaded backtest SST for {year}: {n_times} days", flush=True)
+        return ds
+    
+    # Not found — download it (handles test years like 2023, 2024, 2025)
+    print(f"  Year {year} not in baseline_v2/, downloading...", flush=True)
+    return download_year_sst(year)
 
 
-# ============================================================
-# STEP 3: COMPUTE Z-SCORES
-# ============================================================
-# This is the core computation. For each day of SST data:
-#   1. Determine what month it falls in
-#   2. Look up that month's climatological mean and std
-#   3. Compute Z = (observed - mean) / std
-#
-# We compute Z-scores for EVERY pixel on EVERY day.
-# Then we can average across time to get a summary,
-# or look at the most recent day for current conditions.
+# =============================================================================
+# ANOMALY DETECTION
+# =============================================================================
 
-def compute_zscore(sst_ds, clim_ds):
-    """Compute Z-scores for SST data against climatology."""
-    print("\nStep 3: Computing Z-scores...", flush=True)
-
-    sst = sst_ds["sst"]
-
-    # Get the month for each time step
-    months = sst.time.dt.month
-
-    # Look up the climatological mean and std for each time step's month
-    clim_mean = clim_ds["sst_mean"].sel(month=months)
-    clim_std = clim_ds["sst_std"].sel(month=months)
-
+def compute_zscore(sst_data, clim_ds, target_month):
+    """
+    Compute Z-scores: (observed - climatological_mean) / climatological_std
+    
+    Parameters:
+        sst_data: xarray Dataset with SST observations
+        clim_ds: xarray Dataset with monthly_mean and monthly_std
+        target_month: integer 1-12, which month's climatology to compare against
+    
+    Returns:
+        z_scores: xarray DataArray of Z-scores
+        sst_snapshot: the SST slice used
+    """
+    # Get climatological mean and std for the target month
+    clim_mean = clim_ds["sst_mean"].sel(month=target_month)
+    clim_std = clim_ds["sst_std"].sel(month=target_month)
+    
+    # Get the SST snapshot — use the last available timestep in the target month
+    # Filter to just the target month
+    times = sst_data["time"].values
+    month_mask = [int(str(t)[:7].split("-")[1]) == target_month 
+                  for t in times] if hasattr(times[0], 'astype') else [
+                  t.month == target_month for t in 
+                  [np.datetime64(t, 'ns').astype('datetime64[ns]').item() if not hasattr(t, 'month') 
+                   else t for t in times]]
+    
+    # Simpler approach: convert times and filter
+    import pandas as pd
+    time_index = pd.DatetimeIndex(sst_data["time"].values)
+    month_data = sst_data.sel(time=time_index.month == target_month)
+    
+    if len(month_data.time) == 0:
+        print(f"  WARNING: No data found for month {target_month}", flush=True)
+        # Fall back to nearest available month
+        month_data = sst_data.isel(time=-1)
+        sst_snapshot = month_data["sst"].squeeze()
+    else:
+        # Use the last day in the target month (most recent conditions)
+        sst_snapshot = month_data["sst"].isel(time=-1).squeeze()
+    
+    # Align grids — interpolate climatology to match SST resolution if needed
+    # OISST is 0.25° and our climatology should match, but let's be safe
+    try:
+        sst_vals = sst_snapshot.values
+        mean_vals = clim_mean.values
+        std_vals = clim_std.values
+        
+        # If shapes don't match, interpolate climatology to SST grid
+        if sst_vals.shape != mean_vals.shape:
+            print(f"  Grid mismatch: SST {sst_vals.shape} vs clim {mean_vals.shape}, interpolating...", flush=True)
+            clim_mean = clim_mean.interp(
+                latitude=sst_snapshot.latitude if 'latitude' in sst_snapshot.dims else sst_snapshot.lat,
+                longitude=sst_snapshot.longitude if 'longitude' in sst_snapshot.dims else sst_snapshot.lon,
+                method="nearest"
+            )
+            clim_std = clim_std.interp(
+                latitude=sst_snapshot.latitude if 'latitude' in sst_snapshot.dims else sst_snapshot.lat,
+                longitude=sst_snapshot.longitude if 'longitude' in sst_snapshot.dims else sst_snapshot.lon,
+                method="nearest"
+            )
+    except Exception as e:
+        print(f"  Grid alignment note: {e}", flush=True)
+    
     # Compute Z-scores
-    # Where std is 0 or NaN (land pixels), Z will be NaN
-    zscore = (sst - clim_mean) / clim_std
+    # Mask where std is 0 or NaN to avoid division errors
+    std_safe = clim_std.where(clim_std > 0.01)
+    z_scores = (sst_snapshot - clim_mean) / std_safe
+    
+    return z_scores, sst_snapshot
 
-    # Report summary statistics
-    # Use the most recent time step for the "current" assessment
-    latest_z = zscore.isel(time=-1)
-    latest_date = str(sst.time.values[-1])[:10]
-    latest_month = int(sst.time.dt.month.values[-1])
 
-    # Compute spatial statistics (ocean pixels only)
-    z_mean = float(latest_z.mean(skipna=True).values)
-    z_max = float(latest_z.max(skipna=True).values)
-    z_min = float(latest_z.min(skipna=True).values)
-    threshold = ALERT_THRESHOLDS[latest_month]
-    season = SEASON_NAMES[latest_month]
-
-    # Count pixels exceeding threshold
-    n_ocean = int(latest_z.count().values)
-    n_alert = int((latest_z >= threshold).sum().values)
-    alert_pct = (n_alert / n_ocean * 100) if n_ocean > 0 else 0
-
-    print(f"\n  Latest date: {latest_date}", flush=True)
-    print(f"  Season mode: {season}", flush=True)
-    print(f"  Alert threshold: Z >= +{threshold}", flush=True)
-    print(f"  Spatial mean Z-score: {z_mean:+.2f}", flush=True)
-    print(f"  Max Z-score: {z_max:+.2f}", flush=True)
-    print(f"  Min Z-score: {z_min:+.2f}", flush=True)
-    print(f"  Pixels exceeding threshold: {n_alert}/{n_ocean} ({alert_pct:.1f}%)", flush=True)
-
-    # Determine alert level
-    if z_mean >= threshold:
-        alert_level = "ALERT"
-    elif z_mean >= threshold * 0.75:
-        alert_level = "WARNING"
-    elif z_mean >= threshold * 0.5:
-        alert_level = "WATCH"
+def classify_alert(z_mean, z_max, pct_exceedance, gradient_anomaly, month):
+    """
+    Classify the overall alert level based on multiple indicators.
+    
+    Returns: (status_string, color_code)
+    """
+    season_name, watch_thresh, alert_thresh, max_alert = get_season_info(month)
+    
+    # Primary classification based on mean Z-score
+    if z_mean >= max_alert:
+        status = "ALERT"
+    elif z_mean >= alert_thresh:
+        status = "WARNING"
+    elif z_mean >= watch_thresh:
+        status = "WATCH"
     else:
-        alert_level = "NORMAL"
-
-    print(f"\n  >>> PAEWS STATUS: {alert_level} <<<", flush=True)
-
-    return zscore, {
-        "date": latest_date,
-        "month": latest_month,
-        "season": season,
-        "threshold": threshold,
-        "z_mean": z_mean,
-        "z_max": z_max,
-        "z_min": z_min,
-        "n_alert": n_alert,
-        "n_ocean": n_ocean,
-        "alert_pct": alert_pct,
-        "alert_level": alert_level,
+        status = "NORMAL"
+    
+    # Upgrade if spatial exceedance is very high (>25% of pixels above alert)
+    if pct_exceedance > 25 and status == "WARNING":
+        status = "ALERT"
+    
+    # Upgrade if gradient is strongly weakened (upwelling failing)
+    if gradient_anomaly < -1.0 and status in ("WATCH", "WARNING"):
+        status = "WARNING" if status == "WATCH" else "ALERT"
+    
+    colors = {
+        "NORMAL": "green",
+        "WATCH": "gold", 
+        "WARNING": "orange",
+        "ALERT": "red"
     }
+    
+    return status, colors[status]
 
 
-# ============================================================
-# STEP 4: COMPUTE GRADIENT ANOMALY
-# ============================================================
-# Compare the current coastal-offshore gradient against the
-# climatological gradient for this month. If the gradient has
-# weakened, upwelling may be failing.
-
-def compute_gradient_anomaly(sst_ds, clim_ds):
-    """Compute how the current upwelling gradient compares to normal."""
-    print("\nStep 4: Computing gradient anomaly...", flush=True)
-
-    sst = sst_ds["sst"].isel(time=-1)
-    latest_month = int(sst_ds.time.dt.month.values[-1])
-
+def compute_gradient(sst_snapshot, clim_ds, target_month):
+    """
+    Compute the nearshore-offshore SST gradient and compare to climatology.
+    
+    A weakening gradient means upwelling is failing — warm water is reaching
+    the coast, which is bad for anchovies.
+    """
     # Current gradient
-    nearshore_current = float(sst.sel(longitude=slice(-78, -70)).mean(skipna=True).values)
-    offshore_current = float(sst.sel(longitude=slice(-82, -80)).mean(skipna=True).values)
-    gradient_current = offshore_current - nearshore_current
-
+    try:
+        nearshore_sst = float(sst_snapshot.sel(
+            **{get_lon_name(sst_snapshot): NEARSHORE_LON}).mean(skipna=True))
+        offshore_sst = float(sst_snapshot.sel(
+            **{get_lon_name(sst_snapshot): OFFSHORE_LON}).mean(skipna=True))
+    except Exception:
+        # Try alternate dimension names
+        lon_name = [d for d in sst_snapshot.dims if 'lon' in d.lower()][0]
+        nearshore_sst = float(sst_snapshot.sel(**{lon_name: NEARSHORE_LON}).mean(skipna=True))
+        offshore_sst = float(sst_snapshot.sel(**{lon_name: OFFSHORE_LON}).mean(skipna=True))
+    
+    current_gradient = offshore_sst - nearshore_sst
+    
     # Climatological gradient for this month
-    clim_mean = clim_ds["sst_mean"].sel(month=latest_month)
-    nearshore_clim = float(clim_mean.sel(longitude=slice(-78, -70)).mean(skipna=True).values)
-    offshore_clim = float(clim_mean.sel(longitude=slice(-82, -80)).mean(skipna=True).values)
-    gradient_clim = offshore_clim - nearshore_clim
-
-    # Gradient anomaly (negative means weaker upwelling than normal)
-    gradient_anomaly = gradient_current - gradient_clim
-
-    month_names = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-
-    print(f"  Month: {month_names[latest_month]}", flush=True)
-    print(f"  Current gradient:  {gradient_current:+.2f}C (offshore - nearshore)", flush=True)
-    print(f"  Normal gradient:   {gradient_clim:+.2f}C", flush=True)
-    print(f"  Gradient anomaly:  {gradient_anomaly:+.2f}C", flush=True)
-
-    if gradient_anomaly < -1.0:
-        print(f"  >>> UPWELLING WEAKENING DETECTED <<<", flush=True)
-    elif gradient_anomaly < -0.5:
-        print(f"  Upwelling slightly weaker than normal", flush=True)
-    else:
-        print(f"  Upwelling gradient within normal range", flush=True)
-
-    return {
-        "nearshore_current": nearshore_current,
-        "offshore_current": offshore_current,
-        "gradient_current": gradient_current,
-        "nearshore_clim": nearshore_clim,
-        "offshore_clim": offshore_clim,
-        "gradient_clim": gradient_clim,
-        "gradient_anomaly": gradient_anomaly,
-    }
+    clim_mean = clim_ds["sst_mean"].sel(month=target_month)
+    try:
+        clim_nearshore = float(clim_mean.sel(
+            **{get_lon_name(clim_mean): NEARSHORE_LON}).mean(skipna=True))
+        clim_offshore = float(clim_mean.sel(
+            **{get_lon_name(clim_mean): OFFSHORE_LON}).mean(skipna=True))
+    except Exception:
+        lon_name = [d for d in clim_mean.dims if 'lon' in d.lower()][0]
+        clim_nearshore = float(clim_mean.sel(**{lon_name: NEARSHORE_LON}).mean(skipna=True))
+        clim_offshore = float(clim_mean.sel(**{lon_name: OFFSHORE_LON}).mean(skipna=True))
+    
+    normal_gradient = clim_offshore - clim_nearshore
+    gradient_anomaly = current_gradient - normal_gradient
+    
+    return current_gradient, normal_gradient, gradient_anomaly
 
 
-# ============================================================
-# STEP 5: GENERATE ANOMALY DASHBOARD
-# ============================================================
-# A single figure with multiple panels showing:
-#   1. The Z-score map (where are the anomalies?)
-#   2. The actual SST map (what does the ocean look like?)
-#   3. Key statistics and alert status
+def get_lon_name(da):
+    """Find the longitude dimension name in a DataArray."""
+    for name in da.dims:
+        if 'lon' in name.lower():
+            return name
+    # Check coordinates
+    for name in da.coords:
+        if 'lon' in name.lower():
+            return name
+    return 'longitude'
 
-def plot_anomaly_dashboard(zscore_ds, sst_ds, clim_ds, stats, gradient_info, output_suffix=""):
-    """Create a multi-panel anomaly dashboard."""
-    print("\nStep 5: Generating anomaly dashboard...", flush=True)
 
+# =============================================================================
+# VISUALIZATION
+# =============================================================================
+
+def plot_anomaly_dashboard(z_scores, sst_snapshot, status, status_color, 
+                           z_mean, z_max, pct_exceed, gradient_anomaly,
+                           current_gradient, normal_gradient,
+                           target_date, month, year_label="current"):
+    """Generate the 4-panel anomaly dashboard."""
     OUTPUTS.mkdir(parents=True, exist_ok=True)
-
-    latest_z = zscore_ds.isel(time=-1)
-    latest_sst = sst_ds["sst"].isel(time=-1)
-    latest_month = stats["month"]
-    clim_mean = clim_ds["sst_mean"].sel(month=latest_month)
-
-    fig = plt.figure(figsize=(18, 12))
+    
+    season_name, watch, alert, max_alert = get_season_info(month)
+    
+    fig, axes = plt.subplots(2, 2, figsize=(16, 14))
     fig.suptitle(
-        f"PAEWS SST Anomaly Dashboard - {stats['date']}\n"
-        f"Season: {stats['season']} | Status: {stats['alert_level']} | Baseline: 2003-2022",
-        fontsize=16, fontweight="bold"
+        f"PAEWS SST Anomaly Dashboard — {target_date}\n"
+        f"Season: {season_name} | Status: {status}",
+        fontsize=14, fontweight='bold',
+        color=status_color
     )
-
-    # Panel 1: Z-score map (top left)
-    ax1 = fig.add_subplot(2, 2, 1)
-    im1 = latest_z.plot(
-        ax=ax1,
-        vmin=-3, vmax=3,
-        cmap="RdBu_r",
-        cbar_kwargs={"label": "Z-score (std deviations from normal)"}
-    )
-    ax1.set_title(f"SST Z-Score Map\nThreshold: {stats['threshold']:+.1f} SD")
+    
+    # Panel 1: Z-score map
+    ax1 = axes[0, 0]
+    z_plot = z_scores.plot(ax=ax1, vmin=-3, vmax=3, cmap="RdBu_r",
+                           cbar_kwargs={"label": "Z-score (σ)", "shrink": 0.8})
+    ax1.set_title("SST Z-Score Anomaly")
     ax1.set_xlabel("Longitude")
     ax1.set_ylabel("Latitude")
-
-    # Panel 2: Current SST (top right)
-    ax2 = fig.add_subplot(2, 2, 2)
-    latest_sst.plot(
-        ax=ax2,
-        vmin=14, vmax=28,
-        cmap="RdYlBu_r",
-        cbar_kwargs={"label": "SST (C)"}
-    )
-    ax2.set_title(f"Current SST - {stats['date']}")
+    
+    # Panel 2: Raw SST
+    ax2 = axes[0, 1]
+    sst_snapshot.plot(ax=ax2, vmin=14, vmax=30, cmap="RdYlBu_r",
+                      cbar_kwargs={"label": "SST (°C)", "shrink": 0.8})
+    ax2.set_title("Observed SST")
     ax2.set_xlabel("Longitude")
     ax2.set_ylabel("Latitude")
-
-    # Panel 3: Climatological mean for this month (bottom left)
-    ax3 = fig.add_subplot(2, 2, 3)
-    clim_mean.plot(
-        ax=ax3,
-        vmin=14, vmax=28,
-        cmap="RdYlBu_r",
-        cbar_kwargs={"label": "SST (C)"}
+    
+    # Panel 3: Z-score histogram
+    ax3 = axes[1, 0]
+    z_flat = z_scores.values.flatten()
+    z_flat = z_flat[~np.isnan(z_flat)]
+    ax3.hist(z_flat, bins=50, color='steelblue', edgecolor='black', alpha=0.7)
+    ax3.axvline(watch, color='gold', linestyle='--', linewidth=2, label=f'Watch ({watch}σ)')
+    ax3.axvline(alert, color='orange', linestyle='--', linewidth=2, label=f'Alert ({alert}σ)')
+    ax3.axvline(max_alert, color='red', linestyle='--', linewidth=2, label=f'Max Alert ({max_alert}σ)')
+    ax3.axvline(z_mean, color='black', linestyle='-', linewidth=2, label=f'Mean ({z_mean:.2f}σ)')
+    ax3.set_xlabel("Z-score")
+    ax3.set_ylabel("Pixel count")
+    ax3.set_title("Z-Score Distribution")
+    ax3.legend(fontsize=8)
+    
+    # Panel 4: Summary stats text
+    ax4 = axes[1, 1]
+    ax4.axis('off')
+    summary_text = (
+        f"PAEWS ANOMALY DETECTION v2\n"
+        f"{'='*40}\n\n"
+        f"Date: {target_date}\n"
+        f"Season: {season_name}\n"
+        f"Bounding Box: 0°S–16°S, 85°W–70°W\n"
+        f"Baseline: {BASELINE_START_YEAR}–{BASELINE_END_YEAR}\n\n"
+        f"STATUS: {status}\n\n"
+        f"Mean Z-score: {z_mean:+.2f}σ\n"
+        f"Max Z-score:  {z_max:+.2f}σ\n"
+        f"Min Z-score:  {z_scores.min().values:+.2f}σ\n"
+        f"Pixels > alert: {pct_exceed:.1f}%\n\n"
+        f"Gradient (offshore - nearshore):\n"
+        f"  Current:  {current_gradient:+.2f}°C\n"
+        f"  Normal:   {normal_gradient:+.2f}°C\n"
+        f"  Anomaly:  {gradient_anomaly:+.2f}°C\n"
     )
-    month_names = ["", "January", "February", "March", "April", "May", "June",
-                   "July", "August", "September", "October", "November", "December"]
-    ax3.set_title(f"Normal SST - {month_names[latest_month]} Climatology (2003-2022)")
-    ax3.set_xlabel("Longitude")
-    ax3.set_ylabel("Latitude")
-
-    # Panel 4: Text summary (bottom right)
-    ax4 = fig.add_subplot(2, 2, 4)
-    ax4.axis("off")
-
-    # Build summary text
-    summary_lines = [
-        f"PAEWS ANOMALY REPORT",
-        f"{'='*35}",
-        f"Date: {stats['date']}",
-        f"Season: {stats['season']}",
-        f"Alert Level: {stats['alert_level']}",
-        f"Baseline: 2003-2022 (clean)",
-        f"",
-        f"SST Z-SCORE STATISTICS",
-        f"{'-'*35}",
-        f"Spatial Mean:  {stats['z_mean']:+.2f} SD",
-        f"Maximum:       {stats['z_max']:+.2f} SD",
-        f"Minimum:       {stats['z_min']:+.2f} SD",
-        f"Alert Threshold: +{stats['threshold']:.1f} SD",
-        f"Pixels in Alert: {stats['n_alert']}/{stats['n_ocean']} ({stats['alert_pct']:.1f}%)",
-        f"",
-        f"UPWELLING GRADIENT",
-        f"{'-'*35}",
-        f"Current:  {gradient_info['gradient_current']:+.2f}C",
-        f"Normal:   {gradient_info['gradient_clim']:+.2f}C",
-        f"Anomaly:  {gradient_info['gradient_anomaly']:+.2f}C",
-    ]
-
-    if gradient_info['gradient_anomaly'] < -1.0:
-        summary_lines.append(f">>> UPWELLING WEAKENING <<<")
-    elif gradient_info['gradient_anomaly'] < -0.5:
-        summary_lines.append(f"Upwelling slightly weak")
-    else:
-        summary_lines.append(f"Upwelling normal")
-
-    summary_text = "\n".join(summary_lines)
-    ax4.text(0.05, 0.95, summary_text, transform=ax4.transAxes,
-             fontsize=11, verticalalignment="top", fontfamily="monospace",
-             bbox=dict(boxstyle="round", facecolor="lightyellow", alpha=0.8))
-
+    ax4.text(0.1, 0.95, summary_text, transform=ax4.transAxes,
+             fontsize=11, verticalalignment='top', fontfamily='monospace',
+             bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.8))
+    
     plt.tight_layout()
-
-    outpath = OUTPUTS / f"sst_anomaly_dashboard{output_suffix}.png"
+    outpath = OUTPUTS / f"sst_anomaly_dashboard_{year_label}.png"
     plt.savefig(outpath, dpi=150, bbox_inches="tight")
     plt.close()
     print(f"  Dashboard saved: {outpath}", flush=True)
 
 
-# ============================================================
-# STEP 6: SAVE Z-SCORE DATA
-# ============================================================
-def save_zscore(zscore_ds, stats, output_suffix=""):
-    """Save Z-score data as NetCDF for later analysis."""
-    DATA_PROCESSED.mkdir(parents=True, exist_ok=True)
-
-    out_ds = xr.Dataset(
-        {"sst_zscore": zscore_ds},
-        attrs={
-            "title": "PAEWS SST Z-Scores",
-            "description": "SST anomalies as Z-scores relative to 2003-2022 climatology",
-            "baseline_note": "Clean baseline excluding 2023+ El Nino event years",
-            "alert_level": stats["alert_level"],
-            "analysis_date": stats["date"],
-            "created_by": "PAEWS anomaly_detector.py",
-        }
-    )
-    outpath = DATA_PROCESSED / f"sst_anomaly{output_suffix}.nc"
-    out_ds.to_netcdf(outpath)
-    size_kb = outpath.stat().st_size / 1024
-    print(f"  Z-score data saved: {outpath} ({size_kb:.0f} KB)", flush=True)
-
-
-# ============================================================
-# STEP 7: BACKTEST TIME SERIES (for historical years)
-# ============================================================
-# When backtesting, we want to see how the Z-score evolved
-# over time through the year. This generates a time series
-# plot showing the spatial mean Z-score day by day, with
-# the alert threshold overlaid.
-
-def plot_backtest_timeseries(zscore_ds, sst_ds, year):
-    """Plot daily mean Z-score for a full backtest year."""
-    print(f"\nStep 7: Generating {year} backtest time series...", flush=True)
-
+def plot_backtest_timeseries(sst_ds, clim_ds, year):
+    """
+    Generate a full-year time series showing daily Z-scores for a backtest year.
+    This is the 'money chart' — shows exactly when the system would have flagged.
+    """
+    import pandas as pd
+    
     OUTPUTS.mkdir(parents=True, exist_ok=True)
-
-    # Compute daily spatial mean Z-score (average across all ocean pixels)
-    daily_mean_z = zscore_ds.mean(dim=["latitude", "longitude"], skipna=True)
-
-    # Get dates and months for threshold coloring
-    times = sst_ds.time.values
-    dates = [str(t)[:10] for t in times]
-    months = [int(str(t)[5:7]) for t in times]
-    z_values = daily_mean_z.values
-
-    # Get threshold for each day based on its month
-    thresholds = [ALERT_THRESHOLDS[m] for m in months]
-
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 10), sharex=True)
-
-    fig.suptitle(
-        f"PAEWS Backtest: {year} SST Anomaly Time Series\n"
-        f"Daily Spatial Mean Z-Score vs Alert Threshold (baseline: 2003-2022)",
-        fontsize=14, fontweight="bold"
-    )
-
-    # Top panel: Z-score time series
-    ax1.plot(range(len(z_values)), z_values, 'b-', linewidth=0.8, alpha=0.7, label="Daily mean Z-score")
-    ax1.plot(range(len(thresholds)), thresholds, 'r--', linewidth=1.5, label="Alert threshold")
-    ax1.axhline(y=0, color='black', linewidth=0.5)
-
-    # Shade areas where Z exceeds threshold
-    z_arr = np.array(z_values)
-    t_arr = np.array(thresholds)
-    alert_mask = z_arr >= t_arr
-    for i in range(len(z_arr)):
-        if alert_mask[i]:
-            ax1.axvspan(i - 0.5, i + 0.5, alpha=0.3, color='red')
-
-    ax1.set_ylabel("Z-Score (SD from normal)")
-    ax1.legend(loc="upper left")
-    ax1.grid(True, alpha=0.3)
-    ax1.set_ylim(-4, 6)
-
-    # Add month labels
-    month_starts = []
-    month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    current_month = 0
-    for i, m in enumerate(months):
-        if m != current_month:
-            month_starts.append(i)
-            current_month = m
-    ax1.set_xticks(month_starts)
-    ax1.set_xticklabels([month_labels[months[i]-1] for i in month_starts])
-
-    # Bottom panel: Actual SST spatial mean
-    sst_daily_mean = sst_ds["sst"].mean(dim=["latitude", "longitude"], skipna=True)
-    ax2.plot(range(len(sst_daily_mean)), sst_daily_mean.values, 'darkorange', linewidth=1)
-    ax2.set_ylabel("Mean SST (C)")
-    ax2.set_xlabel("Month")
-    ax2.grid(True, alpha=0.3)
-    ax2.set_xticks(month_starts)
-    ax2.set_xticklabels([month_labels[months[i]-1] for i in month_starts])
-
+    
+    times = pd.DatetimeIndex(sst_ds["time"].values)
+    daily_z = []
+    daily_sst = []
+    
+    for i, t in enumerate(times):
+        month = t.month
+        try:
+            clim_mean = clim_ds["sst_mean"].sel(month=month)
+            clim_std = clim_ds["sst_std"].sel(month=month)
+            std_safe = clim_std.where(clim_std > 0.01)
+            
+            sst_slice = sst_ds["sst"].isel(time=i).squeeze()
+            z = ((sst_slice - clim_mean) / std_safe).mean(skipna=True).values
+            sst_mean = sst_slice.mean(skipna=True).values
+            
+            daily_z.append(float(z))
+            daily_sst.append(float(sst_mean))
+        except Exception:
+            daily_z.append(np.nan)
+            daily_sst.append(np.nan)
+    
+    daily_z = np.array(daily_z)
+    daily_sst = np.array(daily_sst)
+    
+    # Build threshold lines (vary by month per seasonal calendar)
+    watch_line = np.array([SEASON_CALENDAR[t.month][1] for t in times])
+    alert_line = np.array([SEASON_CALENDAR[t.month][2] for t in times])
+    max_alert_line = np.array([SEASON_CALENDAR[t.month][3] for t in times])
+    
+    # Plot
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 8), sharex=True)
+    fig.suptitle(f"PAEWS Backtest: {year} SST Anomaly Time Series\n"
+                 f"Baseline: {BASELINE_START_YEAR}–{BASELINE_END_YEAR} | Box: 0°S–16°S, 85°W–70°W",
+                 fontsize=13, fontweight='bold')
+    
+    # Top panel: Z-scores
+    ax1.plot(times, daily_z, color='black', linewidth=0.8, label='Daily mean Z-score')
+    ax1.fill_between(times, alert_line, max_alert_line, alpha=0.2, color='orange', label='Warning zone')
+    ax1.fill_between(times, max_alert_line, 4.0, alpha=0.3, color='red', label='Alert zone')
+    ax1.fill_between(times, watch_line, alert_line, alpha=0.15, color='gold', label='Watch zone')
+    ax1.axhline(0, color='gray', linestyle='-', linewidth=0.5)
+    ax1.set_ylabel("Z-score (σ)")
+    ax1.set_ylim(-3, 4)
+    ax1.legend(loc='upper left', fontsize=8)
+    ax1.set_title("Spatial Mean Z-Score")
+    
+    # Bottom panel: Raw SST
+    ax2.plot(times, daily_sst, color='darkred', linewidth=0.8)
+    ax2.set_ylabel("SST (°C)")
+    ax2.set_xlabel("Date")
+    ax2.set_title("Spatial Mean SST")
+    
     plt.tight_layout()
     outpath = OUTPUTS / f"sst_backtest_{year}.png"
     plt.savefig(outpath, dpi=150, bbox_inches="tight")
@@ -508,69 +498,159 @@ def plot_backtest_timeseries(zscore_ds, sst_ds, year):
     print(f"  Backtest time series saved: {outpath}", flush=True)
 
 
-# ============================================================
-# MAIN EXECUTION
-# ============================================================
+def save_zscore_netcdf(z_scores, year_label):
+    """Save Z-score data as NetCDF for later analysis."""
+    DATA_PROCESSED.mkdir(parents=True, exist_ok=True)
+    
+    z_ds = z_scores.to_dataset(name="z_score")
+    z_ds.attrs["description"] = f"SST anomalies as Z-scores relative to {BASELINE_START_YEAR}-{BASELINE_END_YEAR} climatology v2"
+    z_ds.attrs["bounding_box"] = "0S-16S, 85W-70W"
+    z_ds.attrs["created"] = datetime.now().isoformat()
+    
+    outpath = DATA_PROCESSED / f"sst_anomaly_{year_label}.nc"
+    z_ds.to_netcdf(outpath)
+    size_kb = outpath.stat().st_size / 1024
+    print(f"  Z-score data saved: {outpath} ({size_kb:.0f} KB)", flush=True)
+
+
+# =============================================================================
+# MAIN
+# =============================================================================
+
 if __name__ == "__main__":
-    # Check if backtest mode
-    backtest_year = None
-    if len(sys.argv) > 2 and sys.argv[1] == "--backtest":
-        try:
-            backtest_year = int(sys.argv[2])
-        except ValueError:
-            print(f"ERROR: Invalid year: {sys.argv[2]}", flush=True)
-            sys.exit(1)
-
-    print("=" * 55, flush=True)
-    if backtest_year:
-        print(f"PAEWS Anomaly Detector - BACKTEST MODE ({backtest_year})", flush=True)
+    parser = argparse.ArgumentParser(description="PAEWS SST Anomaly Detector v2")
+    parser.add_argument("--backtest", type=int, default=None,
+                        help="Year to backtest (e.g., 2023)")
+    parser.add_argument("--month", type=int, default=None,
+                        help="Target month 1-12 (default: last month in data)")
+    parser.add_argument("--day", type=int, default=None,
+                        help="Target day 1-31 (default: last day available)")
+    args = parser.parse_args()
+    
+    is_backtest = args.backtest is not None
+    
+    if is_backtest:
+        year = args.backtest
+        month_label = f" month={args.month}" if args.month else ""
+        print("=" * 60, flush=True)
+        print(f"PAEWS Anomaly Detector v2 - BACKTEST MODE ({year}{month_label})", flush=True)
+        print("=" * 60, flush=True)
     else:
-        print("PAEWS Anomaly Detector - CURRENT CONDITIONS", flush=True)
-    print("Baseline: 2003-2022 (clean, excludes El Nino)", flush=True)
-    print("=" * 55, flush=True)
-
-    # Step 1: Load climatology
+        print("=" * 60, flush=True)
+        print("PAEWS Anomaly Detector v2 - CURRENT CONDITIONS", flush=True)
+        print("=" * 60, flush=True)
+    
+    # ---- Step 1: Load climatology ----
     print("\nStep 1: Loading climatology...", flush=True)
     clim_ds = load_climatology()
     if clim_ds is None:
         sys.exit(1)
-
-    # Step 2: Load SST data
+    
+    # ---- Step 2: Load SST data ----
     print("\nStep 2: Loading SST data...", flush=True)
-    if backtest_year:
-        sst_ds = load_backtest_sst(backtest_year)
-        output_suffix = f"_{backtest_year}"
+    if is_backtest:
+        sst_ds = load_backtest_sst(year)
     else:
         sst_ds = load_current_sst()
-        output_suffix = ""
+    
     if sst_ds is None:
+        print("  FATAL: Could not load SST data. Exiting.", flush=True)
         sys.exit(1)
-
-    # Step 3: Compute Z-scores
-    zscore, stats = compute_zscore(sst_ds, clim_ds)
-
-    # Step 4: Gradient anomaly
-    gradient_info = compute_gradient_anomaly(sst_ds, clim_ds)
-
-    # Step 5: Dashboard
-    plot_anomaly_dashboard(zscore, sst_ds, clim_ds, stats, gradient_info, output_suffix)
-
-    # Step 6: Save data
-    save_zscore(zscore, stats, output_suffix)
-
-    # Step 7: Backtest time series (only in backtest mode)
-    if backtest_year:
-        plot_backtest_timeseries(zscore, sst_ds, backtest_year)
-
-    # Final summary
-    print("\n" + "=" * 55, flush=True)
-    print("ANOMALY DETECTION COMPLETE", flush=True)
-    print(f"  Status: {stats['alert_level']}", flush=True)
-    print(f"  Mean Z-score: {stats['z_mean']:+.2f}", flush=True)
-    print(f"  Gradient anomaly: {gradient_info['gradient_anomaly']:+.2f}C", flush=True)
-    if backtest_year:
-        print(f"  Dashboard: outputs/sst_anomaly_dashboard_{backtest_year}.png", flush=True)
-        print(f"  Time series: outputs/sst_backtest_{backtest_year}.png", flush=True)
+    
+    # ---- Determine target month ----
+    import pandas as pd
+    time_index = pd.DatetimeIndex(sst_ds["time"].values)
+    
+    if args.month:
+        target_month = args.month
+        # Filter data to target month to find the right snapshot
+        month_times = time_index[time_index.month == target_month]
+        if len(month_times) == 0:
+            print(f"  ERROR: No data for month {target_month} in this dataset.", flush=True)
+            sys.exit(1)
+        if args.day:
+            # Find closest date to requested day
+            target_date = pd.Timestamp(year=args.backtest or time_index[-1].year, 
+                                        month=target_month, day=args.day)
+            closest_idx = np.argmin(np.abs(time_index - target_date))
+            latest_date = time_index[closest_idx]
+        else:
+            latest_date = month_times[-1]
     else:
-        print(f"  Dashboard: outputs/sst_anomaly_dashboard.png", flush=True)
-    print("=" * 55, flush=True)
+        latest_date = time_index[-1]
+        target_month = latest_date.month
+    
+    # ---- Step 3: Compute Z-scores ----
+    print("\nStep 3: Computing Z-scores...", flush=True)
+    z_scores, sst_snapshot = compute_zscore(sst_ds, clim_ds, target_month)
+    
+    # Statistics
+    z_mean = float(z_scores.mean(skipna=True))
+    z_max = float(z_scores.max(skipna=True))
+    z_min = float(z_scores.min(skipna=True))
+    
+    season_name, watch, alert_thresh, max_alert = get_season_info(target_month)
+    n_exceed = int((z_scores > alert_thresh).sum(skipna=True))
+    n_total = int((~np.isnan(z_scores)).sum())
+    pct_exceed = (n_exceed / n_total * 100) if n_total > 0 else 0
+    
+    print(f"  Target date: {latest_date.strftime('%Y-%m-%d')}", flush=True)
+    print(f"  Target month: {target_month} ({calendar.month_name[target_month]})", flush=True)
+    print(f"  Season mode: {season_name}", flush=True)
+    print(f"  Alert threshold: Z >= +{alert_thresh}", flush=True)
+    print(f"  Spatial mean Z-score: {z_mean:+.2f}", flush=True)
+    print(f"  Max Z-score: {z_max:+.2f}", flush=True)
+    print(f"  Min Z-score: {z_min:+.2f}", flush=True)
+    print(f"  Pixels exceeding threshold: {n_exceed}/{n_total} ({pct_exceed:.1f}%)", flush=True)
+    
+    # ---- Step 4: Gradient analysis ----
+    print("\nStep 4: Computing gradient anomaly...", flush=True)
+    current_gradient, normal_gradient, gradient_anomaly = compute_gradient(
+        sst_snapshot, clim_ds, target_month)
+    
+    print(f"  Month: {calendar.month_abbr[target_month]}", flush=True)
+    print(f"  Current gradient:  {current_gradient:+.2f}C (offshore - nearshore)", flush=True)
+    print(f"  Normal gradient:   {normal_gradient:+.2f}C", flush=True)
+    print(f"  Gradient anomaly:  {gradient_anomaly:+.2f}C", flush=True)
+    
+    if gradient_anomaly < -1.0:
+        print(f"  >>> GRADIENT WARNING: Upwelling significantly weakened <<<", flush=True)
+    else:
+        print(f"  Upwelling gradient within normal range", flush=True)
+    
+    # ---- Step 5: Classify alert ----
+    status, status_color = classify_alert(z_mean, z_max, pct_exceed, gradient_anomaly, target_month)
+    print(f"\n  >>> PAEWS STATUS: {status} <<<", flush=True)
+    
+    # ---- Step 6: Generate dashboard ----
+    print("\nStep 5: Generating anomaly dashboard...", flush=True)
+    year_label = str(year) if is_backtest else "current"
+    if args.month and is_backtest:
+        year_label = f"{year}_m{target_month:02d}"
+    
+    target_date_str = latest_date.strftime('%Y-%m-%d')
+    plot_anomaly_dashboard(
+        z_scores, sst_snapshot, status, status_color,
+        z_mean, z_max, pct_exceed, gradient_anomaly,
+        current_gradient, normal_gradient,
+        target_date_str, target_month, year_label
+    )
+    
+    # ---- Step 7: Save Z-score data ----
+    save_zscore_netcdf(z_scores, year_label)
+    
+    # ---- Step 8: Backtest time series ----
+    if is_backtest:
+        print(f"\nStep 7: Generating {year} backtest time series...", flush=True)
+        plot_backtest_timeseries(sst_ds, clim_ds, year)
+    
+    # ---- Summary ----
+    print("\n" + "=" * 60, flush=True)
+    print(f"ANOMALY DETECTION v2 COMPLETE", flush=True)
+    print(f"  Status: {status}", flush=True)
+    print(f"  Mean Z-score: {z_mean:+.2f}", flush=True)
+    print(f"  Gradient anomaly: {gradient_anomaly:+.2f}C", flush=True)
+    print(f"  Dashboard: outputs/sst_anomaly_dashboard_{year_label}.png", flush=True)
+    if is_backtest:
+        print(f"  Time series: outputs/sst_backtest_{year}.png", flush=True)
+    print("=" * 60, flush=True)
