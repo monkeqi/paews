@@ -20,6 +20,11 @@ BAD for anchovies (suppressed upwelling, reduced nutrients).
 NEGATIVE Z-scores mean COLDER than normal (enhanced upwelling,
 usually good for productivity).
 
+BASELINE REFERENCE:
+Z-scores are computed against a CLEAN 2003-2022 baseline that
+excludes the 2023 El Nino and subsequent years. This prevents
+event contamination from dampening anomaly signals.
+
 ALERT THRESHOLDS (from our seasonal calendar):
   Feb-Mar (MAXIMUM ALERT):   flag at Z >= +1.5
   Apr-Jul (ACTIVE SEASON):   flag at Z >= +2.0
@@ -31,9 +36,8 @@ This script can run on:
   2. Any historical year (for backtesting - e.g., 2023)
 
 OUTPUT:
-  outputs/sst_anomaly_map.png      - spatial Z-score map
-  outputs/sst_anomaly_summary.png  - dashboard with map + gradient + stats
-  data/processed/sst_anomaly.nc    - Z-score data as NetCDF
+  outputs/sst_anomaly_dashboard.png      - dashboard with map + gradient + stats
+  data/processed/sst_anomaly.nc          - Z-score data as NetCDF
 
 Usage (current data):
   & C:/Users/josep/miniconda3/Scripts/conda.exe run -n geosentinel python c:/Users/josep/Documents/paews/scripts/anomaly_detector.py
@@ -112,7 +116,8 @@ def load_climatology():
         print("  Run compute_climatology.py first.", flush=True)
         return None
     clim = xr.open_dataset(clim_path)
-    print(f"  Loaded climatology: {clim_path.name}", flush=True)
+    baseline = clim.attrs.get("baseline_period", "unknown")
+    print(f"  Loaded climatology: {clim_path.name} (baseline: {baseline})", flush=True)
     return clim
 
 
@@ -173,7 +178,6 @@ def compute_zscore(sst_ds, clim_ds):
     months = sst.time.dt.month
 
     # Look up the climatological mean and std for each time step's month
-    # xarray's .sel() with the month coordinate does this elegantly
     clim_mean = clim_ds["sst_mean"].sel(month=months)
     clim_std = clim_ds["sst_std"].sel(month=months)
 
@@ -310,7 +314,7 @@ def plot_anomaly_dashboard(zscore_ds, sst_ds, clim_ds, stats, gradient_info, out
     fig = plt.figure(figsize=(18, 12))
     fig.suptitle(
         f"PAEWS SST Anomaly Dashboard - {stats['date']}\n"
-        f"Season: {stats['season']} | Status: {stats['alert_level']}",
+        f"Season: {stats['season']} | Status: {stats['alert_level']} | Baseline: 2003-2022",
         fontsize=16, fontweight="bold"
     )
 
@@ -348,7 +352,7 @@ def plot_anomaly_dashboard(zscore_ds, sst_ds, clim_ds, stats, gradient_info, out
     )
     month_names = ["", "January", "February", "March", "April", "May", "June",
                    "July", "August", "September", "October", "November", "December"]
-    ax3.set_title(f"Normal SST - {month_names[latest_month]} Climatology")
+    ax3.set_title(f"Normal SST - {month_names[latest_month]} Climatology (2003-2022)")
     ax3.set_xlabel("Longitude")
     ax3.set_ylabel("Latitude")
 
@@ -363,6 +367,7 @@ def plot_anomaly_dashboard(zscore_ds, sst_ds, clim_ds, stats, gradient_info, out
         f"Date: {stats['date']}",
         f"Season: {stats['season']}",
         f"Alert Level: {stats['alert_level']}",
+        f"Baseline: 2003-2022 (clean)",
         f"",
         f"SST Z-SCORE STATISTICS",
         f"{'-'*35}",
@@ -410,7 +415,8 @@ def save_zscore(zscore_ds, stats, output_suffix=""):
         {"sst_zscore": zscore_ds},
         attrs={
             "title": "PAEWS SST Z-Scores",
-            "description": "SST anomalies as Z-scores relative to 2003-2025 climatology",
+            "description": "SST anomalies as Z-scores relative to 2003-2022 climatology",
+            "baseline_note": "Clean baseline excluding 2023+ El Nino event years",
             "alert_level": stats["alert_level"],
             "analysis_date": stats["date"],
             "created_by": "PAEWS anomaly_detector.py",
@@ -452,7 +458,7 @@ def plot_backtest_timeseries(zscore_ds, sst_ds, year):
 
     fig.suptitle(
         f"PAEWS Backtest: {year} SST Anomaly Time Series\n"
-        f"Daily Spatial Mean Z-Score vs Alert Threshold",
+        f"Daily Spatial Mean Z-Score vs Alert Threshold (baseline: 2003-2022)",
         fontsize=14, fontweight="bold"
     )
 
@@ -520,6 +526,7 @@ if __name__ == "__main__":
         print(f"PAEWS Anomaly Detector - BACKTEST MODE ({backtest_year})", flush=True)
     else:
         print("PAEWS Anomaly Detector - CURRENT CONDITIONS", flush=True)
+    print("Baseline: 2003-2022 (clean, excludes El Nino)", flush=True)
     print("=" * 55, flush=True)
 
     # Step 1: Load climatology

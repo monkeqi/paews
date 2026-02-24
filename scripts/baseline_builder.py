@@ -1,7 +1,7 @@
 """
 PAEWS Phase 2 - Step 1: SST Baseline Builder
 =============================================
-Downloads 22 years (2003-2025) of daily SST data from NOAA OISST,
+Downloads 20 years (2003-2022) of daily SST data from NOAA OISST,
 one year at a time, and saves each year as a separate NetCDF file.
 
 WHY WE NEED THIS:
@@ -13,21 +13,37 @@ of February data to compute the average and standard deviation.
 This is called a "climatological baseline" -- the historical
 reference that all future measurements are compared against.
 
+BASELINE PERIOD RATIONALE (2003-2022):
+We exclude 2023+ from the baseline to prevent El Nino contamination.
+Including event years in the baseline inflates the mean and std,
+which dampens anomaly magnitude and makes events look less extreme.
+This is a standard practice in operational climatology -- the baseline
+must be a "clean" reference period representing normal conditions.
+
+2003-2022 gives us 20 years, which is robust for ocean monitoring
+statistics (Hobday et al. 2016). The WMO recommends 30 years for
+climate normals, but 20 is standard for satellite-era ocean products
+where sensor records are shorter.
+
 WHY YEAR BY YEAR:
-The full 22-year daily dataset is too large to download in one
+The full 20-year daily dataset is too large to download in one
 request -- the ERDDAP server would time out. So we break it into
 annual chunks. Each year of daily SST for our Peru box is about
 300-400 KB (small because OISST is 0.25 degree resolution).
 
-IMPORTANT: This script will take 10-20 minutes to run because
-it makes 23 separate HTTP requests with pauses between them
+IMPORTANT: This script will take 10-15 minutes to run because
+it makes 20 separate HTTP requests with pauses between them
 to be polite to the NOAA server. Do not interrupt it.
 
-After this finishes, you will have 23 files:
+After this finishes, you will have 20 files:
   data/baseline/sst_2003.nc
   data/baseline/sst_2004.nc
   ...
-  data/baseline/sst_2025.nc
+  data/baseline/sst_2022.nc
+
+Note: If you previously downloaded 2023-2025 files, they will
+remain on disk but will NOT be used by compute_climatology.py.
+You can keep them for backtesting purposes.
 
 Next step: compute_climatology.py will read all these files
 and compute monthly means and standard deviations.
@@ -62,19 +78,16 @@ SST_SERVER = "https://coastwatch.pfeg.noaa.gov"
 SST_DATASET = "ncdcOisst21Agg_LonPM180"
 SST_VARIABLE = "sst"
 
-# Baseline period: 2003 to 2025
+# Baseline period: 2003 to 2022 (CLEAN -- excludes 2023+ El Nino)
 # We start at 2003 to match MODIS Aqua chlorophyll availability.
-# This gives us 23 years of data -- more than enough for robust
-# climatological statistics. The WMO recommends 30 years for
-# climate normals, but for ocean monitoring 20+ is standard
-# practice (Hobday et al. 2016 used ~30 years where available).
+# We end at 2022 to exclude the 2023 El Nino event and its
+# aftermath from the baseline. This prevents future information
+# leakage and keeps the reference period scientifically clean.
+# 20 years is robust for satellite-era ocean monitoring statistics.
 BASELINE_START_YEAR = 2003
-BASELINE_END_YEAR = 2025
+BASELINE_END_YEAR = 2022
 
 # Pause between downloads (seconds) -- be polite to the server.
-# ERDDAP servers are free public resources. Hammering them with
-# rapid requests can get your IP temporarily blocked. A 3-second
-# pause between annual downloads is courteous and safe.
 PAUSE_BETWEEN_DOWNLOADS = 3
 
 
@@ -130,7 +143,6 @@ def download_sst_year(year, server_max_date=None):
 
     # Skip if already downloaded (allows resuming interrupted runs)
     if outfile.exists():
-        # Verify the file is valid by trying to open it
         try:
             ds = xr.open_dataset(outfile)
             n_days = ds.dims.get("time", ds.sizes.get("time", 0))
@@ -141,7 +153,6 @@ def download_sst_year(year, server_max_date=None):
             print(f"  {year}: Existing file is corrupted - re-downloading", flush=True)
 
     # Build ERDDAP URL
-    # OISST uses T12:00:00Z timestamps (noon UTC)
     url = (
         f"{SST_SERVER}/erddap/griddap/{SST_DATASET}.nc"
         f"?{SST_VARIABLE}[({start_date}T12:00:00Z):1:({stop_date}T12:00:00Z)]"
@@ -162,7 +173,6 @@ def download_sst_year(year, server_max_date=None):
     if r.status_code == 200:
         outfile.write_bytes(r.content)
         size_kb = len(r.content) / 1024
-        # Verify the downloaded file
         try:
             ds = xr.open_dataset(outfile)
             n_days = ds.dims.get("time", ds.sizes.get("time", 0))
@@ -188,13 +198,9 @@ if __name__ == "__main__":
     print(f"Dataset: {SST_DATASET}", flush=True)
     print("=" * 55, flush=True)
 
-    # Create output directory
     DATA_BASELINE.mkdir(parents=True, exist_ok=True)
-
-    # Check server availability
     t_min, t_max = get_sst_time_range()
 
-    # Track results
     years = list(range(BASELINE_START_YEAR, BASELINE_END_YEAR + 1))
     total = len(years)
     success = 0
@@ -210,11 +216,9 @@ if __name__ == "__main__":
         else:
             failed.append(year)
 
-        # Pause between downloads (skip after last one)
         if i < total - 1:
             time.sleep(PAUSE_BETWEEN_DOWNLOADS)
 
-    # Summary
     print("\n" + "=" * 55, flush=True)
     print("BASELINE DOWNLOAD SUMMARY", flush=True)
     print(f"  Successful: {success}/{total} years", flush=True)
@@ -224,7 +228,6 @@ if __name__ == "__main__":
     else:
         print("  All years downloaded successfully!", flush=True)
 
-    # List what we have
     print(f"\nFiles in {DATA_BASELINE}:", flush=True)
     for f in sorted(DATA_BASELINE.glob("sst_*.nc")):
         size_kb = f.stat().st_size / 1024

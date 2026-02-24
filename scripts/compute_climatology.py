@@ -1,17 +1,17 @@
 """
 PAEWS Phase 2 - Step 2: Compute SST Climatology
 =================================================
-Reads all 23 years of baseline SST data and computes monthly
+Reads 20 years (2003-2022) of baseline SST data and computes monthly
 climatological statistics: mean and standard deviation for
 each pixel for each calendar month (January through December).
 
 WHAT IS A CLIMATOLOGY?
 A climatology answers: "What does this pixel normally look like
-in February?" If we have 23 Februaries of data, we average them
+in February?" If we have 20 Februaries of data, we average them
 all to get the mean, and compute the spread (standard deviation).
 
 For example, if pixel (-12.5, -77.5) has these February averages
-across 23 years: [20.1, 19.8, 21.3, 20.5, 22.1, ...]
+across 20 years: [20.1, 19.8, 21.3, 20.5, 22.1, ...]
   Mean = 20.4 C  (what "normal February" looks like here)
   Std  = 0.8 C   (how much February typically varies)
 
@@ -19,9 +19,18 @@ Then if current February reads 23.0 C at this pixel:
   Z-score = (23.0 - 20.4) / 0.8 = +3.25
 That is 3.25 standard deviations above normal -- a strong anomaly.
 
+CLEAN BASELINE (2003-2022):
+We deliberately exclude 2023+ from the baseline to prevent
+El Nino contamination. Including event years would:
+  * Inflate the monthly mean
+  * Inflate the standard deviation
+  * Reduce anomaly magnitude (making events look less extreme)
+  * Leak future information into the reference period
+This is standard practice in operational oceanographic monitoring.
+
 WHY MONTHLY (NOT WEEKLY)?
-Weekly climatologies would be noisier because you only have 23
-samples per week. Monthly gives you ~23*30 = 690 daily values
+Weekly climatologies would be noisier because you only have 20
+samples per week. Monthly gives you ~20*30 = 600 daily values
 per month per pixel, which produces much more stable statistics.
 For our seasonal alert calendar, monthly resolution is sufficient.
 We can refine to biweekly later if needed.
@@ -61,14 +70,15 @@ DATA_BASELINE = BASE_DIR / "data" / "baseline"
 DATA_PROCESSED = BASE_DIR / "data" / "processed"
 OUTPUTS = BASE_DIR / "outputs"
 
+# CLEAN BASELINE: 2003-2022 (excludes 2023+ El Nino contamination)
 BASELINE_START_YEAR = 2003
-BASELINE_END_YEAR = 2025
+BASELINE_END_YEAR = 2022
 
 
 # ============================================================
 # STEP 1: LOAD ALL BASELINE FILES INTO ONE DATASET
 # ============================================================
-# We open all 23 yearly NetCDF files and concatenate them along
+# We open all 20 yearly NetCDF files and concatenate them along
 # the time dimension. xarray makes this easy with open_mfdataset
 # ("multi-file dataset"), but we will do it manually so you can
 # see exactly what is happening at each step.
@@ -105,7 +115,6 @@ def load_all_baseline_data():
         return None
 
     # Concatenate all years along the time axis
-    # This creates one continuous time series from 2003-01-01 to 2025-12-31
     print(f"\n  Combining {len(datasets)} files ({total_days} total days)...", flush=True)
     combined = xr.concat(datasets, dim="time")
 
@@ -134,7 +143,7 @@ def load_all_baseline_data():
 #
 # IMPORTANT: We use ddof=1 in std() for the standard deviation.
 # This gives us the "sample standard deviation" (dividing by N-1
-# instead of N). This is the correct choice when our 23 years
+# instead of N). This is the correct choice when our 20 years
 # are a SAMPLE of all possible years, not the complete population.
 # It is a small correction but it is statistically proper.
 
@@ -145,7 +154,7 @@ def compute_monthly_climatology(combined_ds):
     sst = combined_ds["sst"]
 
     # Group by calendar month and compute statistics
-    # This is the key operation -- it takes ~8400 daily maps and
+    # This is the key operation -- it takes ~7300 daily maps and
     # reduces them to 12 monthly statistics maps
     print("  Computing monthly means...", flush=True)
     monthly_mean = sst.groupby("time.month").mean(dim="time")
@@ -179,7 +188,7 @@ def compute_monthly_climatology(combined_ds):
 # ============================================================
 # We save the climatology as a single NetCDF file with three
 # variables. This file is small (~50 KB) because it only has
-# 12 time steps (months) instead of 8400 (days).
+# 12 time steps (months) instead of 7300 (days).
 #
 # This is the file that the anomaly detector will load to
 # compare current conditions against.
@@ -201,6 +210,7 @@ def save_climatology(monthly_mean, monthly_std, monthly_count):
             "title": "PAEWS SST Monthly Climatology",
             "description": "Monthly mean and standard deviation of SST from NOAA OISST",
             "baseline_period": f"{BASELINE_START_YEAR}-{BASELINE_END_YEAR}",
+            "baseline_note": "Clean baseline excluding 2023+ El Nino event years",
             "source": "ncdcOisst21Agg_LonPM180 via ERDDAP",
             "created_by": "PAEWS compute_climatology.py",
         }
@@ -242,7 +252,7 @@ def plot_climatology(clim_ds):
     fig, axes = plt.subplots(3, 4, figsize=(20, 15))
     fig.suptitle(
         f"PAEWS SST Monthly Climatology ({BASELINE_START_YEAR}-{BASELINE_END_YEAR})\n"
-        f"NOAA OISST - Peru Coast",
+        f"NOAA OISST - Peru Coast (clean baseline, excludes 2023+ El Nino)",
         fontsize=16, fontweight="bold"
     )
 
@@ -278,8 +288,6 @@ def plot_climatology(clim_ds):
 # ============================================================
 # STEP 5: COMPUTE AND PLOT THE COASTAL-OFFSHORE SST GRADIENT
 # ============================================================
-# This is the spatial analysis that leverages your GIS skills.
-#
 # Upwelling strength shows up as a DIFFERENCE between cold
 # nearshore water and warm offshore water. We compute this
 # gradient for each month.
@@ -291,10 +299,6 @@ def plot_climatology(clim_ds):
 # A strong gradient (e.g., offshore 4-6C warmer than nearshore)
 # means upwelling is active. When the gradient weakens toward
 # zero, upwelling is failing -- this is an anomaly signal.
-#
-# In Phase 2 anomaly detection, we will compute this gradient
-# for current data and compare it against the climatological
-# gradient. For now we just compute and visualize the baseline.
 
 def compute_gradient_climatology(clim_ds):
     """Compute the coastal-offshore SST gradient for each month."""
@@ -303,14 +307,11 @@ def compute_gradient_climatology(clim_ds):
     sst_mean = clim_ds["sst_mean"]
 
     # Define nearshore and offshore zones
-    # Nearshore: within ~50km of coast (roughly lon > -78 for central Peru)
-    # Offshore: 100-200km from coast (roughly lon < -80)
     nearshore = sst_mean.sel(longitude=slice(-78, -70)).mean(dim=["latitude", "longitude"])
     offshore = sst_mean.sel(longitude=slice(-82, -80)).mean(dim=["latitude", "longitude"])
 
     # Gradient = offshore minus nearshore
     # Positive means offshore is warmer (normal upwelling)
-    # Near zero means upwelling has collapsed
     gradient = offshore - nearshore
 
     month_names = [
@@ -377,7 +378,7 @@ def compute_gradient_climatology(clim_ds):
 if __name__ == "__main__":
     print("=" * 55, flush=True)
     print("PAEWS Climatology Calculator", flush=True)
-    print(f"Baseline: {BASELINE_START_YEAR} to {BASELINE_END_YEAR}", flush=True)
+    print(f"Baseline: {BASELINE_START_YEAR} to {BASELINE_END_YEAR} (clean, excludes El Nino)", flush=True)
     print("=" * 55, flush=True)
 
     # Step 1: Load all baseline data
