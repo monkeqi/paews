@@ -1,0 +1,31 @@
+year,season,zone,start_date,end_date,quota_mt,catch_mt,catch_pct,outcome,el_nino,notes
+2010,1,north-central,2010-04-20,2010-07-28,3500000,3400000,97,NORMAL,0,Normal season
+2010,2,north-central,2010-11-22,2011-01-18,2500000,2300000,92,NORMAL,0,La Nina conditions
+2011,1,north-central,2011-04-01,2011-07-31,3675000,3600000,98,NORMAL,0,Strong La Nina year
+2011,2,north-central,2011-11-22,2012-01-31,2500000,2070000,83,REDUCED,0,Late start delayed season
+2012,1,north-central,2012-04-27,2012-07-31,2700000,2310000,86,REDUCED,0,Below average biomass
+2012,2,north-central,2012-11-22,2013-01-31,810000,750000,93,REDUCED,0,Very low quota set
+2013,1,north-central,2013-05-16,2013-07-31,2526000,2300000,91,NORMAL,0,Recovered biomass
+2013,2,north-central,2013-11-21,2014-01-31,2312000,2200000,95,NORMAL,0,Normal conditions
+2014,1,north-central,2014-04-23,2014-07-31,2530000,1450000,57,DISRUPTED,1,El Nino onset reduced catch
+2014,2,north-central,2014-11-13,2015-01-26,1147000,1100000,96,REDUCED,1,Low quota due to El Nino
+2015,1,north-central,2015-04-09,2015-07-31,2580000,2000000,78,REDUCED,1,Strong El Nino building
+2015,2,north-central,2015-11-18,2016-01-27,1110000,860000,77,DISRUPTED,1,Strong El Nino peak
+2016,1,north-central,2016-06-27,2016-07-27,1000000,600000,60,DISRUPTED,1,El Nino aftermath very short season
+2016,2,north-central,2016-11-04,2017-01-27,2000000,1800000,90,NORMAL,0,Recovery began
+2017,1,north-central,2017-04-22,2017-07-24,2789000,2300000,82,REDUCED,1,Coastal El Nino impact
+2017,2,north-central,2017-11-23,2018-01-27,1490000,1450000,97,NORMAL,0,Post-Nino recovery
+2018,1,north-central,2018-04-13,2018-07-17,3714000,3600000,97,NORMAL,0,La Nina good conditions
+2018,2,north-central,2018-11-09,2019-01-15,2098000,2000000,95,NORMAL,0,Normal
+2019,1,north-central,2019-05-03,2019-07-09,2138000,2100000,98,NORMAL,0,Normal year
+2019,2,north-central,2019-11-04,2020-01-08,2792000,2700000,97,NORMAL,0,Strong biomass
+2020,1,north-central,2020-05-13,2020-08-06,2786000,2700000,97,NORMAL,0,Good season despite COVID
+2020,2,north-central,2020-11-09,2021-01-15,2778000,2450000,88,NORMAL,0,Normal
+2021,1,north-central,2021-04-29,2021-07-22,2517000,2500000,99,NORMAL,0,Excellent season
+2021,2,north-central,2021-11-17,2022-01-13,2604000,2600000,100,NORMAL,0,Strong biomass record catch
+2022,1,north-central,2022-05-04,2022-07-13,2791000,2700000,97,NORMAL,0,Normal
+2022,2,north-central,2022-11-04,2023-01-10,2282000,1600000,70,DISRUPTED,1,Closed early high juveniles El Nino onset
+2023,1,north-central,,,0,0,0,CANCELLED,1,First season cancelled June 8 2023 El Nino juveniles 86%
+2023,2,north-central,2023-10-26,2024-01-13,1682000,1261000,75,DISRUPTED,1,Reduced quota unfavorable El Nino scenario
+2024,1,north-central,2024-04-16,2024-07-18,2475000,2431000,98,NORMAL,0,Full recovery post-El Nino
+2024,2,north-central,2024-11-01,2025-01-23,2510000,2380000,95,NORMAL,0,Best since 2020
