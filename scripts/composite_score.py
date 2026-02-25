@@ -280,16 +280,29 @@ def compute_bio_threshold(year, month, sst_clim):
 # FEATURE MATRIX BUILDER
 # =============================================================================
 
-def build_feature_matrix(ground_truth, sst_clim, chl_clim, nino_df):
+def build_feature_matrix(ground_truth, sst_clim, chl_clim, nino_df, ledger=None):
     """
     For each IMARPE season, compute the environmental features
     from the month BEFORE the season started (or the decision month).
     
-    For season 1 (April-July start), we look at March conditions.
-    For season 2 (November start), we look at October conditions.
-    For cancelled seasons, we look at the month before the usual start.
+    CSV-FIRST ARCHITECTURE:
+      - If a ledger (existing CSV) is provided, use Copernicus Chl values
+        and SLA values from it rather than recomputing from MODIS.
+      - SST is always recomputed from raw OISST files (no sensor change).
+      - Niño is always recomputed from the indices CSV.
+      - Only falls back to MODIS Chl if no Copernicus value exists.
     """
     print("\n  Building feature matrix...", flush=True)
+    
+    # Load ledger if it exists
+    if ledger is not None:
+        print(f"  Ledger loaded: {len(ledger)} rows", flush=True)
+        has_cop_chl = 'chl_source' in ledger.columns
+        if has_cop_chl:
+            cop_count = (ledger['chl_source'] == 'Copernicus').sum()
+            print(f"  Copernicus Chl available for {cop_count} seasons", flush=True)
+    else:
+        has_cop_chl = False
     
     records = []
     for _, row in ground_truth.iterrows():
@@ -302,34 +315,52 @@ def build_feature_matrix(ground_truth, sst_clim, chl_clim, nino_df):
         else:
             decision_month = 10  # October (before November start)
         
-        # SST Z-score
+        # ---- SST: always compute from raw OISST (no sensor change) ----
         sst_z, mhw_pct = compute_sst_zscore_for_season(year, decision_month, sst_clim)
         
-        # Chl Z-score
-        chl_z, lchl_pct = compute_chl_zscore_for_season(year, decision_month, chl_clim)
+        # ---- Chl: prefer Copernicus from ledger, fallback to MODIS ----
+        chl_z = np.nan
+        lchl_pct = np.nan
+        chl_source = 'NONE'
+        match = pd.DataFrame()  # empty default
         
-        # Niño 1+2 at t-1 (1 month lag)
+        if ledger is not None:
+            match = ledger[(ledger['year'] == year) & (ledger['season'] == season)]
+            if len(match) > 0:
+                m = match.iloc[0]
+                # Use Copernicus if available
+                if has_cop_chl and m.get('chl_source') == 'Copernicus':
+                    val = m.get('chl_z')
+                    if val is not None and not pd.isna(val):
+                        chl_z = float(val)
+                        lchl_pct = float(m.get('lchl_pct', 0))
+                        chl_source = 'COP'
+        
+        # Fallback: compute from MODIS if no Copernicus value
+        if np.isnan(chl_z):
+            chl_z_modis, lchl_pct_modis = compute_chl_zscore_for_season(year, decision_month, chl_clim)
+            if not np.isnan(chl_z_modis):
+                chl_z = chl_z_modis
+                lchl_pct = lchl_pct_modis
+                chl_source = 'MODIS'
+        
+        # ---- Niño 1+2: always compute from indices CSV ----
         nino12_t1 = get_nino12_for_season(year, decision_month, nino_df, lag=1)
-        
-        # Niño 1+2 at t-2 (2 month lag — test both)
         nino12_t2 = get_nino12_for_season(year, decision_month, nino_df, lag=2)
         
         # Season flag: 1 = summer (Dec-Mar), 0 = winter (Apr-Nov)
-        # Summer anomalies are deadlier — pushes SST past biological limits
         is_summer = 1 if decision_month in [1, 2, 3, 12] else 0
         
         # Biological threshold: % of pixels where absolute SST > 23°C
-        # Anchovy thermal tolerance ceiling is ~23-24°C
         bio_thresh_pct = compute_bio_threshold(year, decision_month, sst_clim)
         
         # Hardcoded composite (baseline)
         if not np.isnan(sst_z) and not np.isnan(chl_z):
-            # Chl Z is inverted: negative = bad, so we flip sign for composite
             composite_hard = 0.4 * sst_z + 0.4 * (-chl_z) + 0.2 * (nino12_t1 if not np.isnan(nino12_t1) else 0)
         else:
             composite_hard = np.nan
         
-        records.append({
+        rec = {
             'year': year,
             'season': season,
             'outcome': row['outcome'],
@@ -344,9 +375,20 @@ def build_feature_matrix(ground_truth, sst_clim, chl_clim, nino_df):
             'nino12_t1': nino12_t1,
             'nino12_t2': nino12_t2,
             'composite_hard': composite_hard,
-        })
+            'chl_source': chl_source,
+            'sla_z': np.nan,  # Filled from ledger below
+        }
         
-        status = "OK" if not np.isnan(sst_z) else "NO DATA"
+        # Pull SLA from ledger if available
+        if ledger is not None and len(match) > 0:
+            for sla_col in ['sla_z', 'sla_cm', 'sla_pct_pos']:
+                val = match.iloc[0].get(sla_col)
+                if val is not None and not pd.isna(val):
+                    rec[sla_col] = float(val)
+        
+        records.append(rec)
+        
+        status = chl_source
         if not np.isnan(sst_z) and not np.isnan(chl_z) and not np.isnan(nino12_t1):
             print(f"    {year} S{season} ({row['outcome'][:4]}): SST_Z={sst_z:+.2f}  Chl_Z={chl_z:+.2f}  "
                   f"Niño12={nino12_t1:+.2f}  Bio>23={bio_thresh_pct:.0f}%  Sum={is_summer}  "
@@ -375,6 +417,7 @@ def run_logistic_regression(features_df):
     print("\n--- Logistic Regression ---", flush=True)
     
     # Drop rows with NaN features
+    # 5 core features — SLA and thermal_shock dropped (noise with 28 samples)
     feature_cols = ['sst_z', 'chl_z', 'nino12_t1', 'is_summer', 'bio_thresh_pct']
     df = features_df.dropna(subset=['sst_z', 'chl_z', 'nino12_t1', 'target'])
     
@@ -425,22 +468,22 @@ def run_logistic_regression(features_df):
     intercept = model_final.intercept_[0]
     
     print(f"\n  DATA-DRIVEN WEIGHTS (standardized):", flush=True)
-    print(f"    SST_Z:       {coefs[0]:+.3f}", flush=True)
-    print(f"    -Chl_Z:      {coefs[1]:+.3f}", flush=True)
-    print(f"    Niño 1+2:    {coefs[2]:+.3f}", flush=True)
-    print(f"    Summer flag:  {coefs[3]:+.3f}", flush=True)
-    print(f"    Bio >23°C:   {coefs[4]:+.3f}", flush=True)
-    print(f"    Intercept:   {intercept:+.3f}", flush=True)
+    print(f"    SST_Z:        {coefs[0]:+.3f}", flush=True)
+    print(f"    -Chl_Z:       {coefs[1]:+.3f}", flush=True)
+    print(f"    Niño 1+2:     {coefs[2]:+.3f}", flush=True)
+    print(f"    Summer flag:   {coefs[3]:+.3f}", flush=True)
+    print(f"    Bio >23°C:    {coefs[4]:+.3f}", flush=True)
+    print(f"    Intercept:    {intercept:+.3f}", flush=True)
     
     # Normalized relative weights
     abs_coefs = np.abs(coefs)
     rel_weights = abs_coefs / abs_coefs.sum()
     print(f"\n  RELATIVE IMPORTANCE:", flush=True)
-    print(f"    SST:     {rel_weights[0]:.1%}", flush=True)
-    print(f"    Chl:     {rel_weights[1]:.1%}", flush=True)
-    print(f"    Niño:    {rel_weights[2]:.1%}", flush=True)
-    print(f"    Season:  {rel_weights[3]:.1%}", flush=True)
-    print(f"    Bio>23:  {rel_weights[4]:.1%}", flush=True)
+    print(f"    SST:      {rel_weights[0]:.1%}", flush=True)
+    print(f"    Chl:      {rel_weights[1]:.1%}", flush=True)
+    print(f"    Niño:     {rel_weights[2]:.1%}", flush=True)
+    print(f"    Season:   {rel_weights[3]:.1%}", flush=True)
+    print(f"    Bio>23:   {rel_weights[4]:.1%}", flush=True)
     
     # Add predictions to dataframe
     df = df.copy()
@@ -688,9 +731,70 @@ if __name__ == "__main__":
     print("\nStep 2: Building static ocean mask...", flush=True)
     get_static_ocean_mask(sst_clim, chl_clim)
     
-    # ---- Build feature matrix ----
+    # ---- Build feature matrix (CSV-first: prefers Copernicus Chl from ledger) ----
     print("\nStep 3: Computing features for each season...", flush=True)
-    features_df = build_feature_matrix(ground_truth, sst_clim, chl_clim, nino_df)
+    
+    # Load existing CSV as ledger (has Copernicus Chl, SLA, etc.)
+    ledger_path = DATA_EXTERNAL / "paews_feature_matrix.csv"
+    ledger = None
+    if ledger_path.exists():
+        ledger = pd.read_csv(ledger_path)
+        print(f"  Loaded ledger: {ledger_path.name} ({len(ledger)} rows)", flush=True)
+    
+    features_df = build_feature_matrix(ground_truth, sst_clim, chl_clim, nino_df, ledger=ledger)
+    
+    # ---- Patch remaining gaps (rows where SST was missing, e.g. 2024) ----
+    if ledger is not None:
+        print("\n  Checking for remaining gaps (SST-missing rows)...", flush=True)
+        fill_cols = ['sst_z', 'chl_z', 'mhw_pct', 'lchl_pct', 'bio_thresh_pct',
+                     'nino12_t1', 'nino12_t2', 'composite_hard', 'is_summer',
+                     'sla_z', 'sla_cm', 'sla_pct_pos']
+        fill_count = 0
+        for i, row in features_df.iterrows():
+            # Only patch if SST is missing (Chl is already handled by CSV-first logic)
+            if pd.isna(row.get('sst_z')):
+                match = ledger[(ledger['year'] == row['year']) & 
+                               (ledger['season'] == row['season'])]
+                if len(match) > 0:
+                    m = match.iloc[0]
+                    filled_any = False
+                    for col in fill_cols:
+                        if col in match.columns:
+                            val = m.get(col)
+                            if val is not None and not pd.isna(val):
+                                features_df.at[i, col] = val
+                                filled_any = True
+                    if filled_any:
+                        fill_count += 1
+                        # Recompute composite if we now have enough data
+                        sst_z = features_df.at[i, 'sst_z']
+                        chl_z = features_df.at[i, 'chl_z']
+                        nino = features_df.at[i, 'nino12_t1']
+                        if not pd.isna(sst_z) and not pd.isna(chl_z):
+                            nino_val = nino if not pd.isna(nino) else 0
+                            features_df.at[i, 'composite_hard'] = (
+                                0.4 * sst_z + 0.4 * (-chl_z) + 0.2 * nino_val
+                            )
+                        print(f"    Filled {int(row['year'])} S{int(row['season'])} "
+                              f"SST={features_df.at[i,'sst_z']:+.2f} "
+                              f"Chl={features_df.at[i,'chl_z']:+.2f} "
+                              f"Comp={features_df.at[i,'composite_hard']:+.2f}"
+                              if not pd.isna(features_df.at[i,'sst_z']) and not pd.isna(features_df.at[i,'chl_z'])
+                              else f"    Partially filled {int(row['year'])} S{int(row['season'])}",
+                              flush=True)
+        print(f"  Patched {fill_count} SST-missing seasons", flush=True)
+    
+    # ---- Add thermal shock flag (nonlinear trigger from reviewer feedback) ----
+    # Once >25% of pixels exceed 23°C, anchovy have fled — binary is stronger than linear %
+    features_df['thermal_shock'] = (features_df['bio_thresh_pct'] > 25.0).astype(int)
+    
+    # ---- Ensure sla_z column exists (populated by sla_pipeline.py) ----
+    if 'sla_z' not in features_df.columns:
+        features_df['sla_z'] = np.nan
+    
+    # Print summary of filled data
+    valid_count = features_df.dropna(subset=['sst_z', 'chl_z']).shape[0]
+    print(f"  Total seasons with valid features: {valid_count}/{len(features_df)}", flush=True)
     
     # Save feature matrix
     feat_path = DATA_EXTERNAL / "paews_feature_matrix.csv"
