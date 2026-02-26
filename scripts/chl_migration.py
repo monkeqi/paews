@@ -46,7 +46,7 @@ MIN_OBS = 5
 # Coastal productivity mask: only average Z-scores over pixels where
 # climatological mean Chl exceeds this percentile. This filters out
 # open-ocean pixels that dilute the upwelling signal.
-PRODUCTIVE_PERCENTILE = 50  # top 50% most productive pixels
+PRODUCTIVE_PERCENTILE = 40  # top 40% — tuned via mask_tuner.py (PR-AUC 0.698→0.705, FP 7→6)
 
 
 def load_copernicus_chl():
