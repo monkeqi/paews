@@ -1,27 +1,25 @@
 """
-predict_2026_s1.py - Download latest data and generate 2026 S1 live prediction
+predict_2026_s1.py - PAEWS 2026 S1 Live Prediction (Preliminary)
 
 Usage:
     cd C:/Users/josep/Documents/paews
     python scripts/predict_2026_s1.py
 
-Prerequisites:
-    - copernicusmarine login (already configured)
-    - Internet connection
-    - Existing pipeline files (composite_score.py, chl_migration.py)
+Data already on disk (no downloads needed):
+    - SST 2026: data/current/sst_current.nc (Jan 1 - Feb 8)
+    - Chl 2026: data/current/chlorophyll_current.nc (Jan 1 - Feb 7, VIIRS)
+    - SST climatology: data/processed/sst_climatology_v2.nc
+    - Chl climatology: data/processed/chl_climatology_copernicus.nc
+    - Nino indices: data/external/nino_indices_monthly.csv
+    - Training data: data/external/paews_feature_matrix.csv
 
-What it does:
-    1. Downloads 2025 SST from NOAA ERDDAP
-    2. Downloads 2025-2026 Chl from Copernicus
-    3. Computes S1 2026 features (Jan-Feb 2026, partial season)
-    4. Loads trained model from existing 30 samples
-    5. Outputs risk probability for 2026 S1
+NOTE: S1 decision month is March, but we only have data through early Feb.
+      This is a PRELIMINARY prediction. Rerun after March data is available.
 """
 
 import numpy as np
 import pandas as pd
 import xarray as xr
-import requests
 import os
 import sys
 from pathlib import Path
@@ -31,413 +29,356 @@ from sklearn.preprocessing import StandardScaler
 
 # === PATHS ===
 BASE = Path(__file__).resolve().parent.parent
-SST_DIR = BASE / "data" / "sst"
-CHL_DIR = BASE / "data" / "copernicus_chl"
-FEATURE_CSV = BASE / "data" / "external" / "paews_feature_matrix.csv"
-MASK_FILE = BASE / "masks" / "coastal_mask_40pct.nc"
-CLIM_SST = BASE / "data" / "processed" / "sst_climatology_v2.nc"
-CLIM_CHL = BASE / "data" / "processed" / "chl_climatology_copernicus.nc"
+DATA_CURRENT = BASE / "data" / "current"
+DATA_BASELINE = BASE / "data" / "baseline"
+DATA_PROCESSED = BASE / "data" / "processed"
+DATA_EXTERNAL = BASE / "data" / "external"
+FEATURE_CSV = DATA_EXTERNAL / "paews_feature_matrix.csv"
 
-# === BOUNDING BOX ===
-LAT_MIN, LAT_MAX = -16.0, 0.0
-LON_MIN, LON_MAX = -85.0, -70.0
-
-def step1_download_sst_2025():
-    """Download 2025 SST from NOAA ERDDAP."""
-    sst_file = SST_DIR / "sst_2025.nc"
-    if sst_file.exists():
-        print(f"  SST 2025 already exists: {sst_file}")
-        return sst_file
-    
-    print("  Downloading SST 2025 from ERDDAP...")
-    url = (
-        "https://coastwatch.pfeg.noaa.gov/erddap/griddap/ncdcOisst21Agg_LonPM180.nc?"
-        f"sst[(2025-01-01T12:00:00Z):1:(2025-12-31T12:00:00Z)]"
-        f"[({LAT_MIN}):1:({LAT_MAX})]"
-        f"[({LON_MIN}):1:({LON_MAX})]"
-    )
-    
-    r = requests.get(url, timeout=300)
-    r.raise_for_status()
-    
-    SST_DIR.mkdir(parents=True, exist_ok=True)
-    with open(sst_file, 'wb') as f:
-        f.write(r.content)
-    
-    ds = xr.open_dataset(sst_file)
-    print(f"  Downloaded: {len(ds.time)} days, {sst_file.stat().st_size/1e6:.1f} MB")
-    ds.close()
-    return sst_file
+# === FEATURE COLUMNS (must match composite_score.py) ===
+FEATURE_COLS = ['sst_z', 'chl_z', 'nino12_t1', 'is_summer', 'bio_thresh_pct']
 
 
-def step1b_download_sst_2026():
-    """Download 2026 SST (Jan-Feb) from NOAA ERDDAP."""
-    sst_file = SST_DIR / "sst_2026.nc"
-    if sst_file.exists():
-        print(f"  SST 2026 already exists: {sst_file}")
-        return sst_file
-    
-    print("  Downloading SST 2026 (Jan-Feb) from ERDDAP...")
-    url = (
-        "https://coastwatch.pfeg.noaa.gov/erddap/griddap/ncdcOisst21Agg_LonPM180.nc?"
-        f"sst[(2026-01-01T12:00:00Z):1:(2026-02-25T12:00:00Z)]"
-        f"[({LAT_MIN}):1:({LAT_MAX})]"
-        f"[({LON_MIN}):1:({LON_MAX})]"
-    )
-    
-    try:
-        r = requests.get(url, timeout=300)
-        r.raise_for_status()
-        SST_DIR.mkdir(parents=True, exist_ok=True)
-        with open(sst_file, 'wb') as f:
-            f.write(r.content)
-        ds = xr.open_dataset(sst_file)
-        print(f"  Downloaded: {len(ds.time)} days, {sst_file.stat().st_size/1e6:.1f} MB")
-        ds.close()
-        return sst_file
-    except Exception as e:
-        print(f"  Could not download 2026 SST: {e}")
-        print("  Will use 2025 data only for partial prediction")
-        return None
+def compute_sst_features(target_month=2):
+    """
+    Compute SST Z-score and bio threshold for Feb 2026.
+    Matches composite_score.py: uses last available day in target month,
+    computes pixel-wise Z-score against climatology, takes spatial mean.
+    """
+    print("  Loading SST climatology...", flush=True)
+    clim = xr.open_dataset(DATA_PROCESSED / "sst_climatology_v2.nc")
 
+    print("  Loading SST current (2026)...", flush=True)
+    ds = xr.open_dataset(DATA_CURRENT / "sst_current.nc")
 
-def step2_download_chl_2025():
-    """Download 2025 Chl from Copernicus Marine."""
-    # Check for existing files
-    existing = list(CHL_DIR.glob("*2025*")) + list(CHL_DIR.glob("*202501*"))
-    if existing:
-        print(f"  Chl 2025 files found: {[f.name for f in existing]}")
-        return existing
-    
-    print("  Downloading Chl 2025 from Copernicus Marine...")
-    print("  (This uses copernicusmarine CLI - make sure you're logged in)")
-    
-    CHL_DIR.mkdir(parents=True, exist_ok=True)
-    
-    import subprocess
-    cmd = [
-        "copernicusmarine", "subset",
-        "--dataset-id", "cmems_obs-oc_glo_bgc-plankton_my_l4-multi-4km_P1M",
-        "--variable", "CHL",
-        "--minimum-longitude", str(LON_MIN),
-        "--maximum-longitude", str(LON_MAX),
-        "--minimum-latitude", str(LAT_MIN),
-        "--maximum-latitude", str(LAT_MAX),
-        "--start-datetime", "2025-01-01",
-        "--end-datetime", "2025-12-31",
-        "--output-directory", str(CHL_DIR),
-        "--output-filename", "chl_2025.nc",
-        "--force-download",
-    ]
-    
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-        if result.returncode == 0:
-            print(f"  Downloaded Chl 2025")
-            return [CHL_DIR / "chl_2025.nc"]
-        else:
-            print(f"  copernicusmarine error: {result.stderr[:500]}")
-            # Try NRT product instead
-            print("  Trying NRT product...")
-            cmd[3] = "cmems_obs-oc_glo_bgc-plankton_nrt_l4-multi-4km_P1M"
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-            if result.returncode == 0:
-                print(f"  Downloaded Chl 2025 (NRT)")
-                return [CHL_DIR / "chl_2025.nc"]
-            else:
-                print(f"  NRT also failed: {result.stderr[:500]}")
-                return []
-    except Exception as e:
-        print(f"  Download failed: {e}")
-        return []
+    # Filter to target month
+    time_index = pd.DatetimeIndex(ds["time"].values)
+    month_data = ds.sel(time=time_index.month == target_month)
 
+    if len(month_data.time) == 0:
+        print(f"  WARNING: No SST data for month {target_month}, using all available", flush=True)
+        month_data = ds
 
-def compute_sst_features(months_to_use):
-    """Compute SST features for the given months from 2025-2026 data."""
-    
-    # Load SST climatology
-    clim = xr.open_dataset(CLIM_SST)
-    
-    # Load available SST data
-    sst_files = []
-    for year in [2025, 2026]:
-        f = SST_DIR / f"sst_{year}.nc"
-        if f.exists():
-            sst_files.append(f)
-    
-    if not sst_files:
-        print("ERROR: No SST data available for 2025-2026")
-        return None
-    
-    datasets = [xr.open_dataset(f) for f in sst_files]
-    sst_all = xr.concat(datasets, dim='time')
-    
-    # Filter to requested months
-    sst_period = sst_all.sel(time=sst_all.time.dt.month.isin(months_to_use))
-    
-    if len(sst_period.time) == 0:
-        print(f"ERROR: No SST data for months {months_to_use}")
-        return None
-    
-    print(f"  SST data: {sst_period.time.values[0]} to {sst_period.time.values[-1]}")
-    print(f"  {len(sst_period.time)} days of data")
-    
-    # Compute mean SST over period
-    sst_mean = sst_period['sst'].mean(dim='time')
-    
-    # Compute climatological mean for these months
-    clim_months = clim['sst_mean'].sel(month=months_to_use).mean(dim='month')
-    clim_std_months = clim['sst_std'].sel(month=months_to_use).mean(dim='month')
-    
-    # Z-score
-    sst_z_map = (sst_mean - clim_months) / clim_std_months
-    sst_z = float(sst_z_map.mean(skipna=True))
-    
-    # Bio threshold: % pixels > 23C
-    valid_pixels = sst_mean.count().values
-    hot_pixels = (sst_mean > 23.0).sum().values
-    bio_thresh = float(hot_pixels / valid_pixels * 100) if valid_pixels > 0 else 0
-    
-    for ds in datasets:
-        ds.close()
-    clim.close()
-    
-    return {
-        'sst_z': sst_z,
-        'bio_thresh_pct': bio_thresh,
-    }
+    # Use last available timestep (matches composite_score.py approach)
+    sst_snap = month_data["sst"].isel(time=-1).squeeze()
 
+    # Drop zlev if present
+    if 'zlev' in sst_snap.dims:
+        sst_snap = sst_snap.isel(zlev=0)
 
-def compute_chl_features(months_to_use):
-    """Compute Chl features from available 2025 data."""
-    
-    # Find Chl files
-    chl_files = list(CHL_DIR.glob("*2025*")) + list(CHL_DIR.glob("*chl_2025*"))
-    
-    if not chl_files:
-        print("  WARNING: No 2025 Chl data. Using NaN for Chl features.")
-        return {'chl_z': np.nan}
-    
-    # Load climatology
-    clim = xr.open_dataset(CLIM_CHL)
-    
-    # Load Chl data
-    ds = xr.open_dataset(chl_files[0])
-    
-    # Find the CHL variable (might be 'CHL' or 'chl' or 'chlor_a')
-    chl_var = None
-    for candidate in ['CHL', 'chl', 'chlor_a', 'CHL_mean']:
-        if candidate in ds.data_vars:
-            chl_var = candidate
-            break
-    
-    if chl_var is None:
-        print(f"  WARNING: Cannot find CHL variable. Available: {list(ds.data_vars)}")
-        return {'chl_z': np.nan}
-    
-    # Filter to months
-    if 'time' in ds.dims:
-        chl_period = ds.sel(time=ds.time.dt.month.isin(months_to_use))
-    else:
-        chl_period = ds
-    
-    print(f"  Chl variable: {chl_var}")
-    
-    # Log-transform
-    chl_log = np.log10(chl_period[chl_var].where(chl_period[chl_var] > 0))
-    chl_log_mean = chl_log.mean(dim='time') if 'time' in chl_log.dims else chl_log
-    
-    # Apply coastal mask if available
-    if MASK_FILE.exists():
-        mask = xr.open_dataset(MASK_FILE)
-        # Try to align mask with data (dimensions might differ)
-        try:
-            mask_var = list(mask.data_vars)[0]
-            chl_log_mean = chl_log_mean.where(mask[mask_var] == 1)
-        except:
-            pass
-        mask.close()
-    
-    # Compute Z-score against climatology
-    clim_mean = clim['chl_log_mean'].sel(month=months_to_use).mean(dim='month') if 'month' in clim.dims else clim['chl_log_mean'].mean()
-    clim_std = clim['chl_log_std'].sel(month=months_to_use).mean(dim='month') if 'month' in clim.dims else clim['chl_log_std'].mean()
-    
-    chl_z_map = (chl_log_mean - clim_mean) / clim_std
-    chl_z = float(chl_z_map.mean(skipna=True))
-    
+    last_date = str(month_data.time.values[-1])[:10]
+    print(f"  SST snapshot date: {last_date}", flush=True)
+    print(f"  SST grid shape: {sst_snap.shape}", flush=True)
+
+    # Climatology for target month
+    clim_mean = clim["sst_mean"].sel(month=target_month)
+    clim_std = clim["sst_std"].sel(month=target_month)
+    std_safe = clim_std.where(clim_std > 0.01, 0.01)
+
+    # Z-score map
+    z_map = (sst_snap - clim_mean) / std_safe
+    sst_z = float(z_map.mean(skipna=True))
+
+    # MHW percentage (Z > 1.28)
+    valid_z = z_map.where(z_map.notnull())
+    mhw_count = int((valid_z > 1.28).sum())
+    total_valid = int(valid_z.notnull().sum())
+    mhw_pct = mhw_count / total_valid * 100 if total_valid > 0 else 0
+
+    # Bio threshold: % pixels where absolute SST > 23C
+    valid_sst = sst_snap.notnull()
+    above_23 = (sst_snap > 23.0) & valid_sst
+    total_valid_sst = int(valid_sst.sum())
+    bio_thresh_pct = float(above_23.sum()) / total_valid_sst * 100 if total_valid_sst > 0 else 0
+
     ds.close()
     clim.close()
-    
-    return {'chl_z': chl_z}
+
+    print(f"  SST Z-score: {sst_z:+.3f}", flush=True)
+    print(f"  MHW pixels:  {mhw_pct:.1f}%", flush=True)
+    print(f"  Bio > 23C:   {bio_thresh_pct:.1f}%", flush=True)
+
+    return sst_z, bio_thresh_pct, mhw_pct
 
 
-def get_nino12():
-    """Get latest Nino 1+2 value."""
-    nino_file = BASE / "data" / "external" / "nino_indices_monthly.csv"
-    if not nino_file.exists():
-        print("  WARNING: No Nino indices file. Using 0.0")
-        return 0.0
-    
-    df = pd.read_csv(nino_file)
-    # Find the nino12 column
-    nino_col = None
-    for c in df.columns:
-        if '12' in c.lower() or 'nino12' in c.lower() or 'nino1+2' in c.lower():
-            nino_col = c
-            break
-    
-    if nino_col is None:
-        # Try last numeric column
-        print(f"  Nino columns available: {list(df.columns)}")
-        return 0.0
-    
-    # Get latest value
-    latest = df[nino_col].dropna().iloc[-1]
-    print(f"  Latest Nino 1+2: {latest}")
-    return float(latest)
+def compute_chl_features(target_month=2):
+    """
+    Compute Chl Z-score for Feb 2026 from VIIRS daily data.
+    Uses log-transform and compares against Copernicus climatology.
+    """
+    print("  Loading Chl climatology...", flush=True)
+
+    # Try Copernicus climatology first, fall back to v2
+    clim_path = DATA_PROCESSED / "chl_climatology_copernicus.nc"
+    if not clim_path.exists():
+        clim_path = DATA_PROCESSED / "chl_climatology_v2.nc"
+    clim = xr.open_dataset(clim_path)
+    print(f"  Using climatology: {clim_path.name}", flush=True)
+    print(f"  Clim variables: {list(clim.data_vars)}", flush=True)
+
+    print("  Loading Chl current (2026 VIIRS)...", flush=True)
+    ds = xr.open_dataset(DATA_CURRENT / "chlorophyll_current.nc")
+
+    # Filter to target month
+    time_index = pd.DatetimeIndex(ds["time"].values)
+    month_data = ds.sel(time=time_index.month == target_month)
+
+    if len(month_data.time) == 0:
+        print(f"  WARNING: No Chl data for month {target_month}, using all available", flush=True)
+        month_data = ds
+
+    # Get chlorophyll variable
+    chl_var = 'chlor_a'
+    if chl_var not in month_data:
+        for candidate in ['CHL', 'chl', 'chlorophyll']:
+            if candidate in month_data:
+                chl_var = candidate
+                break
+
+    # Monthly mean of daily VIIRS data, then log-transform
+    chl_monthly = month_data[chl_var].mean(dim='time').squeeze()
+
+    # Drop altitude if present
+    if 'altitude' in chl_monthly.dims:
+        chl_monthly = chl_monthly.isel(altitude=0)
+
+    chl_log = np.log10(chl_monthly.where(chl_monthly > 0))
+
+    print(f"  Chl grid shape: {chl_monthly.shape}", flush=True)
+    valid_pix = int(chl_monthly.notnull().sum())
+    print(f"  Valid Chl pixels: {valid_pix}", flush=True)
+
+    # Get climatological mean and std for target month
+    # Variable names might differ between climatology files
+    clim_mean_var = None
+    clim_std_var = None
+    for v in clim.data_vars:
+        if 'mean' in v.lower() and 'log' in v.lower():
+            clim_mean_var = v
+        elif 'std' in v.lower() and 'log' in v.lower():
+            clim_std_var = v
+
+    # Fallback: try without 'log' qualifier
+    if clim_mean_var is None:
+        for v in clim.data_vars:
+            if 'mean' in v.lower():
+                clim_mean_var = v
+            elif 'std' in v.lower():
+                clim_std_var = v
+
+    if clim_mean_var is None:
+        print(f"  ERROR: Cannot find mean/std in climatology. Vars: {list(clim.data_vars)}")
+        return np.nan
+
+    print(f"  Clim mean var: {clim_mean_var}, std var: {clim_std_var}", flush=True)
+
+    clim_mean = clim[clim_mean_var].sel(month=target_month)
+    clim_std = clim[clim_std_var].sel(month=target_month)
+    std_safe = clim_std.where(clim_std > 0.01, 0.01)
+
+    # Interpolate VIIRS grid to climatology grid (they may differ)
+    chl_lat = [d for d in chl_log.dims if 'lat' in d.lower()][0]
+    chl_lon = [d for d in chl_log.dims if 'lon' in d.lower()][0]
+    clim_lat = [d for d in clim_mean.dims if 'lat' in d.lower()][0]
+    clim_lon = [d for d in clim_mean.dims if 'lon' in d.lower()][0]
+
+    try:
+        chl_log_interp = chl_log.interp({
+            chl_lat: clim_mean[clim_lat],
+            chl_lon: clim_mean[clim_lon],
+        })
+        z_map = (chl_log_interp - clim_mean) / std_safe
+    except Exception as e:
+        print(f"  Grid interpolation failed ({e}), computing on native grid", flush=True)
+        z_map = (chl_log - clim_mean) / std_safe
+
+    chl_z = float(z_map.mean(skipna=True))
+
+    # Low-chl percentage
+    lchl_count = int((z_map < -1.28).sum())
+    total_valid_z = int(z_map.notnull().sum())
+    lchl_pct = lchl_count / total_valid_z * 100 if total_valid_z > 0 else 0
+
+    ds.close()
+    clim.close()
+
+    print(f"  Chl Z-score: {chl_z:+.3f}", flush=True)
+    print(f"  Low-Chl pixels: {lchl_pct:.1f}%", flush=True)
+
+    return chl_z
+
+
+def get_nino12_t1():
+    """
+    Get Nino 1+2 anomaly for t-1 relative to decision month (March).
+    t-1 = February. If Feb not available, use latest.
+    """
+    nino_path = DATA_EXTERNAL / "nino_indices_monthly.csv"
+    df = pd.read_csv(nino_path)
+
+    # Try to get Feb 2026
+    feb = df[(df['year'] == 2026) & (df['month'] == 2)]
+    if len(feb) > 0:
+        val = float(feb['nino12_anom'].iloc[0])
+        print(f"  Nino 1+2 (Feb 2026): {val:+.2f}", flush=True)
+        return val
+
+    # Fall back to latest available
+    latest = df.dropna(subset=['nino12_anom']).iloc[-1]
+    val = float(latest['nino12_anom'])
+    print(f"  Nino 1+2 (latest: {int(latest['year'])}-{int(latest['month']):02d}): {val:+.2f}", flush=True)
+    print(f"  NOTE: Feb 2026 not yet available, using {int(latest['year'])}-{int(latest['month']):02d}", flush=True)
+    return val
 
 
 def run_prediction(features_2026):
-    """Train on 30 historical samples, predict 2026 S1."""
-    
-    # Load training data
+    """
+    Train logistic regression on all 30 historical samples, predict 2026 S1.
+    Matches composite_score.py feature order exactly.
+    """
     train_df = pd.read_csv(FEATURE_CSV)
-    
-    feature_cols = ['chl_z', 'sst_z', 'bio_thresh_pct', 'nino12_t1', 'is_summer']
-    
-    X_train = train_df[feature_cols].values
+
+    # Drop rows with NaN in required features
+    train_df = train_df.dropna(subset=FEATURE_COLS + ['target'])
+
+    X_train = train_df[FEATURE_COLS].values
     y_train = train_df['target'].values
-    
-    # Scale
+
+    print(f"  Training samples: {len(X_train)} ({int(y_train.sum())} positives)", flush=True)
+
     scaler = StandardScaler()
     X_train_s = scaler.fit_transform(X_train)
-    
-    # Train
+
     model = LogisticRegression(max_iter=1000, solver='lbfgs')
     model.fit(X_train_s, y_train)
-    
-    # Build 2026 S1 feature vector
+
+    # Build 2026 S1 feature vector (same column order as FEATURE_COLS)
     x_new = np.array([[
-        features_2026.get('chl_z', 0.0),
-        features_2026.get('sst_z', 0.0),
-        features_2026.get('bio_thresh_pct', 0.0),
-        features_2026.get('nino12_t1', 0.0),
+        features_2026['sst_z'],
+        features_2026['chl_z'],
+        features_2026['nino12_t1'],
         1.0,  # is_summer = True for S1
+        features_2026['bio_thresh_pct'],
     ]])
-    
+
     x_new_s = scaler.transform(x_new)
     prob = model.predict_proba(x_new_s)[0, 1]
-    
-    # Feature contributions
+
+    # Feature contributions (scaled coef * scaled value)
     coefs = model.coef_[0]
     contributions = coefs * x_new_s[0]
-    
-    return prob, feature_cols, x_new[0], contributions
+
+    return prob, coefs, x_new[0], x_new_s[0], contributions, scaler
 
 
 def main():
-    print("=" * 60)
-    print("PAEWS 2026 S1 LIVE PREDICTION")
-    print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    print("=" * 60)
+    print("=" * 64)
+    print("  PAEWS 2026 S1 LIVE PREDICTION (PRELIMINARY)")
+    print(f"  Run date: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f"  Decision month: March (using Feb data - partial season)")
+    print("=" * 64)
     print()
-    
-    # S1 decision months: Jan, Feb, Mar (use what we have)
-    # Best case: Jan-Feb 2026 data
-    # Fallback: use latest available months
-    
-    # Step 1: Download SST
-    print("STEP 1: SST Data")
+
+    # ---- Step 1: SST Features ----
+    print("STEP 1: SST Features (Feb 2026)")
     print("-" * 40)
-    step1_download_sst_2025()
-    sst_2026 = step1b_download_sst_2026()
+    sst_z, bio_thresh_pct, mhw_pct = compute_sst_features(target_month=2)
     print()
-    
-    # Step 2: Download Chl
-    print("STEP 2: Chlorophyll Data")
+
+    # ---- Step 2: Chl Features ----
+    print("STEP 2: Chlorophyll Features (Feb 2026)")
     print("-" * 40)
-    step2_download_chl_2025()
+    chl_z = compute_chl_features(target_month=2)
     print()
-    
-    # Step 3: Compute features
-    print("STEP 3: Computing Features")
+
+    # ---- Step 3: Nino Index ----
+    print("STEP 3: Nino 1+2 Index")
     print("-" * 40)
-    
-    # Determine which months we can use
-    # For S1 prediction in late Feb, ideally use Jan-Feb 2026
-    # Fall back to recent months of 2025 if 2026 not available
-    if sst_2026 is not None:
-        print("  Using Jan-Feb 2026 SST data")
-        sst_months = [1, 2]
-    else:
-        print("  Using Nov-Dec 2025 SST data (fallback)")
-        sst_months = [11, 12]
-    
-    sst_features = compute_sst_features(sst_months)
-    if sst_features is None:
-        print("FATAL: Cannot compute SST features. Need at least 2025 SST data.")
-        return
-    
-    chl_features = compute_chl_features([1, 2] if sst_2026 else [11, 12])
-    nino12 = get_nino12()
-    
-    # Combine features
+    nino12_t1 = get_nino12_t1()
+    print()
+
+    # ---- Step 4: Assemble Features ----
     features = {
-        'sst_z': sst_features['sst_z'],
-        'chl_z': chl_features.get('chl_z', 0.0),
-        'bio_thresh_pct': sst_features['bio_thresh_pct'],
-        'nino12_t1': nino12,
+        'sst_z': sst_z,
+        'chl_z': chl_z if not np.isnan(chl_z) else 0.0,
+        'nino12_t1': nino12_t1,
+        'bio_thresh_pct': bio_thresh_pct,
     }
-    
-    print()
-    print("  Computed features:")
-    for k, v in features.items():
-        print(f"    {k}: {v:.3f}")
-    print()
-    
-    # Step 4: Run prediction
-    print("STEP 4: Prediction")
+
+    print("STEP 4: Feature Summary")
     print("-" * 40)
-    
-    prob, feat_names, feat_values, contributions = run_prediction(features)
-    
-    # Classification
-    threshold = 0.38  # from existing model
-    prediction = "AT-RISK" if prob >= threshold else "NORMAL"
-    
+    print(f"  {'Feature':<18} {'2026 S1':>10}  {'Historical Range':>20}")
+    print(f"  {'-'*18} {'-'*10}  {'-'*20}")
+
+    # Load historical for context
+    hist = pd.read_csv(FEATURE_CSV)
+    for feat in ['sst_z', 'chl_z', 'nino12_t1', 'bio_thresh_pct']:
+        val = features[feat]
+        col = hist[feat].dropna()
+        rng = f"[{col.min():+.2f}, {col.max():+.2f}]"
+        flag = " !!!" if val > col.max() or val < col.min() else ""
+        print(f"  {feat:<18} {val:>+10.3f}  {rng:>20}{flag}")
+
+    print(f"  {'is_summer':<18} {'1':>10}  {'[0, 1]':>20}")
     print()
-    print("=" * 60)
-    print(f"  2026 S1 RISK PROBABILITY: {prob:.2f}")
-    print(f"  PREDICTION: {prediction}")
-    print(f"  (threshold: {threshold})")
-    print("=" * 60)
+
+    if np.isnan(chl_z):
+        print("  WARNING: Chl Z-score is NaN. Using 0.0 (neutral) as fallback.")
+        print()
+
+    # ---- Step 5: Prediction ----
+    print("STEP 5: Model Prediction")
+    print("-" * 40)
+    prob, coefs, x_raw, x_scaled, contributions, scaler = run_prediction(features)
+
+    threshold = 0.38  # from existing model validation
+    prediction = "AT RISK" if prob >= threshold else "NORMAL"
+
     print()
-    
-    # Feature breakdown
-    print("  Feature Breakdown:")
-    print(f"  {'Feature':<20} {'Value':>8} {'Contribution':>14}")
-    print(f"  {'-'*20} {'-'*8} {'-'*14}")
-    for name, val, contrib in zip(feat_names, feat_values, contributions):
-        direction = "+" if contrib > 0 else ""
-        print(f"  {name:<20} {val:>8.3f} {direction}{contrib:>13.3f}")
-    print()
-    
-    # Context
-    print("  Historical Context:")
-    print(f"  - 2024 S1 prob was 0.30 (NORMAL) ✓")
-    print(f"  - 2024 S2 prob was 0.55 (borderline)")
-    print(f"  - 2023 S1 prob was 0.94 (CANCELLED) ✓")
-    print(f"  - Current Nino 1+2: {nino12:.2f} (neutral)")
-    print()
-    
-    if prediction == "NORMAL":
-        print("  ✅ No El Nino threat detected. System suggests normal season.")
+    print("=" * 64)
+    if prediction == "AT RISK":
+        print(f"  >>> 2026 S1 RISK PROBABILITY: {prob:.3f}  [{prediction}] <<<")
     else:
-        print("  ⚠️  Elevated risk detected. Monitor conditions closely.")
-    
+        print(f"      2026 S1 RISK PROBABILITY: {prob:.3f}  [{prediction}]")
+    print(f"      Threshold: {threshold}")
+    print("=" * 64)
     print()
-    print(f"  NOTE: This prediction uses {'Jan-Feb 2026' if sst_2026 else 'late 2025'} data.")
-    print(f"  Rerun in March for a more complete S1 assessment.")
+
+    # Feature contribution breakdown
+    print("  Feature Contributions (to log-odds):")
+    print(f"  {'Feature':<18} {'Raw':>8} {'Scaled':>8} {'Coef':>8} {'Contrib':>10}")
+    print(f"  {'-'*18} {'-'*8} {'-'*8} {'-'*8} {'-'*10}")
+    for i, feat in enumerate(FEATURE_COLS):
+        direction = "+" if contributions[i] > 0 else ""
+        print(f"  {feat:<18} {x_raw[i]:>8.3f} {x_scaled[i]:>8.3f} {coefs[i]:>8.3f} {direction}{contributions[i]:>9.3f}")
+
+    intercept_approx = -np.log(1/prob - 1) - contributions.sum() if 0 < prob < 1 else 0
+    print(f"  {'intercept':<18} {'':>8} {'':>8} {'':>8} {intercept_approx:>+10.3f}")
+    print(f"  {'TOTAL log-odds':<18} {'':>8} {'':>8} {'':>8} {np.log(prob/(1-prob)):>+10.3f}")
+    print()
+
+    # Historical comparison
+    print("  Historical Comparison (S1 seasons):")
+    s1_hist = hist[hist['season'] == 1].dropna(subset=['sst_z', 'chl_z'])
+    for _, row in s1_hist.iterrows():
+        yr = int(row['year'])
+        outcome = row['outcome'][:8] if isinstance(row['outcome'], str) else '?'
+        target = int(row['target'])
+        marker = " <-- DISRUPTED" if target == 1 else ""
+        print(f"    {yr} S1: SST_Z={row['sst_z']:+.2f}  Chl_Z={row['chl_z']:+.2f}  "
+              f"Bio={row['bio_thresh_pct']:5.1f}%  [{outcome}]{marker}")
+
+    print(f"    2026 S1: SST_Z={sst_z:+.2f}  Chl_Z={features['chl_z']:+.2f}  "
+          f"Bio={bio_thresh_pct:5.1f}%  [PREDICTION: {prediction}]")
+    print()
+
+    # Caveats
+    print("  CAVEATS:")
+    print("  - This uses Feb data; official S1 decision month is March")
+    print("  - Rerun after March SST/Chl data becomes available")
+    print("  - Feb Nino 1+2 not yet available; using Jan 2026 value")
+    print(f"  - Model trained on {len(hist)} samples ({int(hist['target'].sum())} disruptions)")
+    print()
 
 
 if __name__ == "__main__":
