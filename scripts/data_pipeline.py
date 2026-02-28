@@ -437,7 +437,7 @@ if __name__ == "__main__":
     # Both datasets have processing lag so we stay a few weeks back.
     # The functions will auto-adjust if stop_date is too recent.
     start = "2026-01-01"
-    stop = "2026-02-08"
+    stop = "2026-02-28"
 
     print("=" * 50, flush=True)
     print("PAEWS Data Pipeline v0.2", flush=True)
