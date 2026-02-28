@@ -1,31 +1,34 @@
 year,season,cruise_code,biomass_mmt,region,source_type,source_detail,verified,integrity_flag,notes
-2010,S1,,,,,,FALSE,1,Not yet found - search repositorio cruise 1002
-2010,S2,,,,,,FALSE,1,Not yet found - search repositorio cruise 1009
-2011,S1,,,,,,FALSE,1,Not yet found - search repositorio cruise 1102
-2011,S2,,,,,,FALSE,1,Not yet found - search repositorio cruise 1109
-2012,S1,,,,,,FALSE,1,Not yet found - search repositorio cruise 1202
-2012,S2,,,,,,FALSE,1,Not yet found - search repositorio cruise 1209
-2013,S1,,,,,,FALSE,1,HIGH PRIORITY - search repositorio cruise 1302
-2013,S2,,,,,,FALSE,1,HIGH PRIORITY - search repositorio cruise 1309
-2014,S1,,,,,,FALSE,1,HIGH PRIORITY - search repositorio cruise 1402
-2014,S2,,,,,,FALSE,1,HIGH PRIORITY - search repositorio cruise 1409
-2015,S1,,,,,,FALSE,1,Not yet found - search repositorio cruise 1502
-2015,S2,,,,,,FALSE,1,Not yet found - search repositorio cruise 1509
-2016,S1,,,,,,FALSE,1,Not yet found - search repositorio cruise 1602
-2016,S2,,,,,,FALSE,1,Not yet found - search repositorio cruise 1609
-2017,S1,,,,,,FALSE,1,HIGH PRIORITY - search repositorio cruise 1702
-2017,S2,,,,,,FALSE,1,HIGH PRIORITY - search repositorio cruise 1709
-2018,S1,1802-04,11.21,total,journal,Castillo et al. (2021) Bol IMARPE 35(2) art/view/301,TRUE,1,
-2018,S2,1808-10,8.78,total,journal,Castillo et al. (2021) Bol IMARPE 35(2) art/view/301,TRUE,1,
-2019,S1,1902-04,8.82,total,journal,Castillo et al. (2021) Bol IMARPE 35(2) art/view/302,TRUE,1,
-2019,S2,1908-09,8.38,total,journal,Castillo et al. (2021) Bol IMARPE 35(2) art/view/302,TRUE,0,Officials investigated for inflating from ~4 to 8.3 MMT
-2020,S1,2002-03,11.05,total,journal,Castillo et al. (2021) Inf Inst Mar Peru 48(3):327-349 p.340 Table 5,TRUE,1,English abstract has SWAPPED values - use Spanish/body text
-2020,S2,2009-11,9.52,total,journal,Castillo et al. (2021) Inf Inst Mar Peru 48(3):327-349 p.342 Table 6,TRUE,1,
-2021,S1,2102-07,12.03,total,journal,Castillo et al. (2023) Bol IMARPE 38(1) art/view/385,TRUE,1,Unified cruise (verano+otono) confirmed by Inf 49(2):175-192
-2021,S2,2109-11,8.03,total,journal,Castillo et al. (2023) Bol IMARPE 38(1) art/view/385,TRUE,1,
-2022,S1,2202-04,7.13,total,journal,Castillo et al. (2024) Bol IMARPE 39(1) art/view/438,TRUE,1,La Nina costera conditions
-2022,S2,2209-11,4.68,total,journal,Castillo et al. (2024) Bol IMARPE 39(1) art/view/438,TRUE,1,Lowest in verified series
-2023,S1,,,,,,FALSE,1,Search PRODUCE Resoluciones
-2023,S2,,,,,,FALSE,1,Search PRODUCE Resoluciones
-2024,S1,,,,,,FALSE,1,Search PRODUCE Resoluciones or recent repositorio
-2024,S2,,,,,,FALSE,1,Search PRODUCE Resoluciones or recent repositorio
+2010,S1,,,,,,False,1,Not yet found - search repositorio cruise 1002
+2010,S2,,,,,,False,1,Not yet found - search repositorio cruise 1009
+2011,S1,,,,,,False,1,Not yet found - search repositorio cruise 1102
+2011,S2,,,,,,False,1,Not yet found - search repositorio cruise 1109
+2012,S1,,,,,,False,1,Not yet found - search repositorio cruise 1202
+2012,S2,,,,,,False,1,Not yet found - search repositorio cruise 1209
+2013,S1,,,,,,False,1,HIGH PRIORITY - search repositorio cruise 1302
+2013,S2,,,,,,False,1,HIGH PRIORITY - search repositorio cruise 1309
+2014,S1,,,,,,False,1,HIGH PRIORITY - search repositorio cruise 1402
+2014,S2,,,,,,False,1,HIGH PRIORITY - search repositorio cruise 1409
+2015,S1,,,,,,False,1,Not yet found - search repositorio cruise 1502
+2015,S2,,,,,,False,1,Not yet found - search repositorio cruise 1509
+2016,S1,,,,,,False,1,Not yet found - search repositorio cruise 1602
+2016,S2,,,,,,False,1,Not yet found - search repositorio cruise 1609
+2017,S1,,,,,,False,1,HIGH PRIORITY - search repositorio cruise 1702
+2017,S2,,,,,,False,1,HIGH PRIORITY - search repositorio cruise 1709
+2018,S1,1802-04,11.21,total,journal,Castillo et al. (2021) Bol IMARPE 35(2) art/view/301,True,1,
+2018,S2,1808-10,8.78,total,journal,Castillo et al. (2021) Bol IMARPE 35(2) art/view/301,True,1,
+2019,S1,1902-04,8.82,total,journal,Castillo et al. (2021) Bol IMARPE 35(2) art/view/302,True,1,
+2019,S2,1908-09,8.38,total,journal,Castillo et al. (2021) Bol IMARPE 35(2) art/view/302,True,0,Officials investigated for inflating from ~4 to 8.3 MMT
+2020,S1,2002-03,11.05,total,journal,Castillo et al. (2021) Inf Inst Mar Peru 48(3):327-349 p.340 Table 5,True,1,English abstract has SWAPPED values - use Spanish/body text
+2020,S2,2009-11,9.52,total,journal,Castillo et al. (2021) Inf Inst Mar Peru 48(3):327-349 p.342 Table 6,True,1,
+2021,S1,2102-07,12.03,total,journal,Castillo et al. (2023) Bol IMARPE 38(1) art/view/385,True,1,Unified cruise (verano+otono) confirmed by Inf 49(2):175-192
+2021,S2,2109-11,8.03,total,journal,Castillo et al. (2023) Bol IMARPE 38(1) art/view/385,True,1,
+2022,S1,2202-04,7.13,total,journal,Castillo et al. (2024) Bol IMARPE 39(1) art/view/438,True,1,La Nina costera conditions
+2022,S2,2209-11,4.68,total,journal,Castillo et al. (2024) Bol IMARPE 39(1) art/view/438,True,1,Lowest in verified series
+2023,S1,,,,,,False,1,Search PRODUCE Resoluciones
+2023,S2,,,,,,False,1,Search PRODUCE Resoluciones
+2024,S1,,,,,,False,1,Search PRODUCE Resoluciones or recent repositorio
+2024,S2,,,,,,False,1,Search PRODUCE Resoluciones or recent repositorio
+2025,S2,,,,,,False,1,Lower than normal biomass in N-C zone per IMARPE. Exact figure TBD.
+2025,S1,,10.93,north-central,MarinTrust/IFFO cross-verified,"MarinTrust WF02 Aug 2025 cites IMARPE Apr 2025: 10,927,796t. SeafoodSource Jun 2025 confirms 10.9M via Austral COO.",True,1,"Cruise code unknown. IMARPE report dated 14-Apr-2025, data through 5-Apr. Eureka LXXVI 19-21 Apr."
+2025,S2,,,,,,False,1,Lower biomass in N-C zone per IMARPE Nov 2025. Redistribution southward. Exact figure TBD.

@@ -29,3 +29,5 @@ year,season,zone,start_date,end_date,quota_mt,catch_mt,catch_pct,outcome,el_nino
 2023,2,north-central,2023-10-26,2024-01-13,1682000,1261000,75,DISRUPTED,1,Reduced quota unfavorable El Nino scenario
 2024,1,north-central,2024-04-16,2024-07-18,2475000,2431000,98,NORMAL,0,Full recovery post-El Nino
 2024,2,north-central,2024-11-01,2025-01-23,2510000,2380000,95,NORMAL,0,Best since 2020
+2025,1,north-central,2025-04-22,2025-07-24,3000000,2457487,82,NORMAL,0,Highest quota since 2018. Closed early for spawning protection.
+2025,2,north-central,2025-11-07,2026-02-01,1630000,1596013,98,NORMAL,0,"Provisional 500k MT, raised to 1.63M after IMARPE survey. 1,596,013 MT landed (DGSFS as of Jan 25). Closed Feb 1."
