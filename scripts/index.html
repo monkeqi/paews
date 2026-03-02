@@ -1,0 +1,2189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weight of Weather — GRACE TWS Explorer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&family=Geist:wght@300;400;500&display=swap');
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; border-radius: 0 !important; }
+
+  :root {
+    --bg: #050505;
+    --panel: rgba(10, 10, 14, 0.75);
+    --border: rgba(255, 255, 255, 0.08);
+    --border-lit: rgba(0, 245, 255, 0.2);
+    --cyan: #00f5ff;
+    --cyan-dim: rgba(0, 245, 255, 0.15);
+    --cyan-glow: rgba(0, 245, 255, 0.4);
+    --red: #ff3131;
+    --red-dim: rgba(255, 49, 49, 0.15);
+    --blue-data: #2196f3;
+    --text: #e0e0e0;
+    --text-dim: #6b6b7b;
+    --text-data: #a1a1aa;
+    --font-head: 'Space Grotesk', sans-serif;
+    --font-data: 'JetBrains Mono', monospace;
+    --font-label: 'Geist', 'Space Grotesk', sans-serif;
+  }
+
+  body {
+    background: var(--bg) url('stars.jpg') center/cover no-repeat fixed;
+    color: var(--text);
+    font-family: var(--font-label);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    cursor: crosshair;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(255,255,255,0.008) 2px,
+      rgba(255,255,255,0.008) 4px
+    );
+    pointer-events: none;
+    z-index: 998;
+  }
+
+  /* Corner bracket mixin via class */
+  .bracketed {
+    position: relative;
+  }
+  .bracketed::before, .bracketed::after {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-color: var(--cyan);
+    border-style: solid;
+    border-width: 0;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .bracketed::before {
+    top: -1px; left: -1px;
+    border-top-width: 1px;
+    border-left-width: 1px;
+  }
+  .bracketed::after {
+    bottom: -1px; right: -1px;
+    border-bottom-width: 1px;
+    border-right-width: 1px;
+  }
+
+  /* Loading */
+  #loading {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: var(--bg);
+    z-index: 1000;
+    transition: opacity 0.6s;
+  }
+  #loading.hidden { opacity: 0; pointer-events: none; }
+  #loading h1 {
+    font-family: var(--font-head);
+    font-size: 1.6rem;
+    font-weight: 300;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 1.5rem;
+  }
+  .load-bar { width: 180px; height: 1px; background: var(--border); overflow: hidden; }
+  .load-bar-fill {
+    height: 100%;
+    width: 30%;
+    background: var(--cyan);
+    animation: sweep 1.2s ease-in-out infinite;
+  }
+  @keyframes sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(500%); } }
+  #load-status {
+    font-family: var(--font-data);
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    margin-top: 1rem;
+    letter-spacing: 0.08em;
+  }
+
+  /* Globe container */
+  #globe-container { position: fixed; inset: 0; z-index: 1; }
+
+  /* ===== HUD ELEMENTS ===== */
+
+  /* Top-left: mission ID */
+  #hud-topleft {
+    position: fixed;
+    top: 1rem; left: 1.2rem;
+    z-index: 10;
+  }
+  #mission-id {
+    font-family: var(--font-head);
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+  #mission-sub {
+    font-family: var(--font-data);
+    font-size: 0.55rem;
+    font-weight: 300;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+    margin-top: 0.2rem;
+  }
+
+  /* Top-right: date + status */
+  #hud-topright {
+    position: fixed;
+    top: 1rem; right: 1.2rem;
+    z-index: 10;
+    text-align: right;
+  }
+  #date-display {
+    font-family: var(--font-data);
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--cyan);
+    line-height: 1;
+    text-shadow: 0 0 20px var(--cyan-dim);
+  }
+  #status-line {
+    font-family: var(--font-data);
+    font-size: 0.5rem;
+    font-weight: 300;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    margin-top: 0.3rem;
+  }
+  .status-dot {
+    display: inline-block;
+    width: 5px; height: 5px;
+    background: #22c55e;
+    margin-right: 0.3rem;
+    vertical-align: middle;
+    animation: blink 2s infinite;
+  }
+  .status-dot.gap { background: var(--red); }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  #global-tally {
+    font-family: var(--font-data);
+    font-size: 0.65rem;
+    color: var(--red);
+    letter-spacing: 0.06em;
+    margin-top: 0.5rem;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--border);
+    background: rgba(255, 49, 49, 0.04);
+    line-height: 1.5;
+  }
+  #global-tally .tally-value {
+    font-size: 1.1rem;
+    font-weight: 500;
+    display: block;
+    margin: 0.15rem 0;
+  }
+  #global-tally .tally-note {
+    font-size: 0.45rem;
+    color: var(--text-dim);
+    display: block;
+    margin-top: 0.2rem;
+  }
+
+  /* Cursor readout — follows mouse over globe */
+  #cursor-readout {
+    position: fixed;
+    z-index: 20;
+    display: none;
+    pointer-events: none;
+    font-family: var(--font-data);
+    font-size: 0.55rem;
+    color: var(--cyan);
+    background: rgba(5,5,5,0.85);
+    border: 1px solid var(--border-lit);
+    padding: 0.25rem 0.5rem;
+    white-space: nowrap;
+    backdrop-filter: blur(4px);
+  }
+
+  /* Bottom: timeline */
+  #timeline-bar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 10;
+    padding: 0 1.2rem 1rem;
+  }
+  #timeline-row {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+  #play-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--cyan);
+    width: 28px; height: 28px;
+    cursor: pointer;
+    font-size: 0.65rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  #play-btn:hover {
+    border-color: var(--cyan);
+    box-shadow: 0 0 8px var(--cyan-dim);
+  }
+  #speed-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    height: 28px;
+    padding: 0 0.5rem;
+    cursor: pointer;
+    font-family: var(--font-data);
+    font-size: 0.5rem;
+    transition: border-color 0.2s;
+  }
+  #speed-btn:hover { border-color: var(--text-dim); }
+
+  #timeline {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 2px;
+    background: rgba(255,255,255,0.08);
+    outline: none;
+    cursor: crosshair;
+  }
+  #timeline::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 8px; height: 16px;
+    background: var(--cyan);
+    cursor: crosshair;
+    box-shadow: 0 0 6px var(--cyan-glow);
+  }
+  #timeline::-moz-range-thumb {
+    width: 8px; height: 16px;
+    background: var(--cyan);
+    border: none;
+    cursor: crosshair;
+  }
+  #time-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.3rem;
+    padding: 0 2.5rem 0 3rem;
+    font-family: var(--font-data);
+    font-size: 0.5rem;
+    color: var(--text-dim);
+    letter-spacing: 0.04em;
+  }
+
+  /* Gap indicator */
+  #gap-indicator {
+    position: fixed;
+    bottom: 4.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 11;
+    font-family: var(--font-data);
+    font-size: 0.55rem;
+    letter-spacing: 0.08em;
+    color: var(--red);
+    background: var(--red-dim);
+    border: 1px solid rgba(255, 49, 49, 0.25);
+    padding: 0.25rem 0.8rem;
+    display: none;
+    text-transform: uppercase;
+  }
+
+  /* Color legend */
+  #legend {
+    position: fixed;
+    bottom: 4.2rem;
+    right: 1.2rem;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--font-data);
+    font-size: 0.5rem;
+    color: var(--text-dim);
+  }
+  #legend-bar { width: 100px; height: 6px; border: 1px solid var(--border); }
+
+  /* Controls hint */
+  #controls-hint {
+    position: fixed;
+    bottom: 4.2rem;
+    left: 1.2rem;
+    z-index: 10;
+    font-family: var(--font-data);
+    font-size: 0.5rem;
+    color: var(--text-dim);
+    letter-spacing: 0.04em;
+  }
+  #controls-hint span { color: var(--cyan); }
+
+  /* ===== DATA PANEL (right side) ===== */
+  #info-panel {
+    position: fixed;
+    top: 4.5rem; right: 1rem;
+    width: 360px;
+    z-index: 10;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(15px);
+    padding: 0;
+    display: none;
+  }
+  #info-panel.visible { display: block; }
+
+  #panel-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+    background: rgba(0, 245, 255, 0.03);
+  }
+  #panel-title {
+    font-family: var(--font-data);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--cyan);
+  }
+  #panel-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 0.9rem;
+    line-height: 1;
+    transition: color 0.2s;
+  }
+  #panel-close:hover { color: var(--text); }
+
+  #panel-body { padding: 0.8rem; }
+
+  #panel-meta {
+    font-family: var(--font-label);
+    font-size: 0.6rem;
+    font-weight: 300;
+    color: var(--text-dim);
+    margin-bottom: 0.6rem;
+  }
+
+  #panel-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1px;
+    margin-bottom: 0.8rem;
+    background: var(--border);
+  }
+  .stat-cell {
+    background: rgba(10, 10, 14, 0.9);
+    padding: 0.5rem 0.4rem;
+    text-align: center;
+  }
+  .stat-val {
+    font-family: var(--font-data);
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .stat-val.negative { color: var(--red); }
+  .stat-val.positive { color: var(--cyan); }
+  .stat-label {
+    font-family: var(--font-data);
+    font-size: 0.42rem;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 0.15rem;
+  }
+
+  #chart-container {
+    width: 100%;
+    height: 150px;
+    margin-bottom: 0.5rem;
+  }
+
+  #panel-note {
+    font-family: var(--font-label);
+    font-size: 0.52rem;
+    font-weight: 300;
+    color: var(--text-dim);
+    line-height: 1.5;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Methodology link */
+  #method-btn {
+    position: fixed;
+    bottom: 4.2rem;
+    left: 50%;
+    transform: translateX(calc(-50% + 6.5rem));
+    z-index: 10;
+    font-family: var(--font-data);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--cyan);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    background: none;
+    border: 1px solid rgba(0, 245, 255, 0.4);
+    padding: 0.4rem 1rem;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+  }
+  #method-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+
+  /* Methodology overlay */
+  #method-overlay {
+    position: fixed; inset: 0;
+    z-index: 100;
+    background: rgba(5, 5, 5, 0.92);
+    backdrop-filter: blur(6px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  #method-overlay.visible { display: flex; }
+  #method-content {
+    width: 520px;
+    max-height: 80vh;
+    overflow-y: auto;
+    background: rgba(10, 10, 14, 0.95);
+    border: 1px solid var(--border);
+    padding: 2rem;
+  }
+  #method-content h2 {
+    font-family: var(--font-head);
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 1.2rem;
+  }
+  .method-field {
+    margin-bottom: 1rem;
+  }
+  .method-field .mf-label {
+    font-family: var(--font-data);
+    font-size: 0.5rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    margin-bottom: 0.25rem;
+  }
+  .method-field .mf-val {
+    font-family: var(--font-label);
+    font-size: 0.72rem;
+    font-weight: 300;
+    color: var(--text-data);
+    line-height: 1.6;
+  }
+  #method-close-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 0.3rem 1rem;
+    font-family: var(--font-data);
+    font-size: 0.55rem;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    margin-top: 1rem;
+    transition: border-color 0.2s;
+  }
+  #method-close-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+
+  /* Guided Tour */
+  #tour-btn {
+    position: fixed;
+    bottom: 4.2rem;
+    left: 50%;
+    transform: translateX(calc(-50% - 6.5rem));
+    z-index: 10;
+    font-family: var(--font-data);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--cyan);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    background: var(--cyan-dim);
+    border: 1px solid var(--cyan);
+    padding: 0.4rem 1rem;
+    transition: background 0.2s, box-shadow 0.2s;
+    box-shadow: 0 0 10px var(--cyan-dim);
+  }
+  #tour-btn:hover { background: rgba(0, 245, 255, 0.25); box-shadow: 0 0 16px var(--cyan-glow); }
+  #tour-btn.active { background: rgba(0, 245, 255, 0.3); box-shadow: 0 0 20px var(--cyan-glow); }
+
+  #tour-narration {
+    position: fixed;
+    bottom: 5.5rem;
+    left: 1.2rem;
+    width: 520px;
+    z-index: 15;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(15px);
+    display: none;
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+  #tour-narration.visible { display: block; opacity: 1; }
+
+  #tour-narration-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.7rem 1.2rem;
+    border-bottom: 1px solid var(--border);
+    background: rgba(0, 245, 255, 0.03);
+  }
+  #tour-stop-label {
+    font-family: var(--font-data);
+    font-size: 0.8rem;
+    color: var(--cyan);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  #tour-progress {
+    font-family: var(--font-data);
+    font-size: 0.7rem;
+    color: var(--text-dim);
+  }
+
+  #tour-body {
+    padding: 1.2rem 1.4rem;
+  }
+  #tour-title {
+    font-family: var(--font-head);
+    font-size: 1.3rem;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 0.7rem;
+  }
+  #tour-text {
+    font-family: var(--font-label);
+    font-size: 0.95rem;
+    font-weight: 300;
+    color: var(--text-data);
+    line-height: 1.75;
+    margin-bottom: 1rem;
+  }
+  #tour-signal {
+    font-family: var(--font-data);
+    font-size: 0.72rem;
+    color: var(--cyan);
+    letter-spacing: 0.04em;
+    padding: 0.6rem 0.8rem;
+    background: rgba(0, 245, 255, 0.04);
+    border: 1px solid var(--border);
+    margin-bottom: 1rem;
+    line-height: 1.65;
+  }
+
+  #tour-controls {
+    display: flex;
+    gap: 0.5rem;
+  }
+  #tour-controls button {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 0.4rem 1.2rem;
+    font-family: var(--font-data);
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+  }
+  #tour-controls button:hover { border-color: var(--cyan); color: var(--cyan); }
+  #tour-controls button.primary {
+    border-color: var(--cyan);
+    color: var(--cyan);
+  }
+  #tour-controls button.primary:hover {
+    background: var(--cyan-dim);
+  }
+  #tour-controls .spacer { flex: 1; }
+
+  /* Layer toggles */
+  #layer-toggles {
+    position: fixed;
+    top: 4.5rem;
+    left: 1.2rem;
+    z-index: 25;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .layer-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-family: var(--font-data);
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+    transition: color 0.2s;
+    user-select: none;
+  }
+  .layer-toggle:hover { color: var(--text); }
+  .layer-toggle .toggle-box {
+    width: 14px;
+    height: 14px;
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.5rem;
+    color: var(--cyan);
+    transition: border-color 0.2s;
+  }
+  .layer-toggle:hover .toggle-box { border-color: var(--cyan); }
+  .layer-toggle.active .toggle-box {
+    border-color: var(--cyan);
+    background: var(--cyan-dim);
+  }
+
+  /* Region labels */
+  #region-labels {
+    position: fixed;
+    inset: 0;
+    z-index: 9;
+    pointer-events: none;
+  }
+  .region-label {
+    position: absolute;
+    pointer-events: auto;
+    cursor: pointer;
+    font-family: var(--font-data);
+    font-size: 0.55rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.7);
+    text-shadow: 0 0 6px rgba(0, 0, 0, 0.8), 0 0 12px rgba(0, 0, 0, 0.5);
+    transition: color 0.2s, opacity 0.3s;
+    white-space: nowrap;
+    transform: translate(-4px, -50%);
+  }
+  .region-label:hover {
+    color: var(--cyan);
+  }
+  .region-label .region-dot {
+    display: inline-block;
+    width: 4px;
+    height: 4px;
+    background: var(--cyan);
+    margin-right: 0.4rem;
+    vertical-align: middle;
+    box-shadow: 0 0 4px var(--cyan-dim);
+  }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <h1>Weight of Weather</h1>
+  <div class="load-bar"><div class="load-bar-fill"></div></div>
+  <div id="load-status">INITIALIZING GRACE TELEMETRY</div>
+</div>
+
+<div id="hud-topleft">
+  <div id="mission-id">Weight of Weather</div>
+  <div id="mission-sub">JPL RL06.3Mv04 CRI · GRACE/GRACE-FO · 2002–2025</div>
+</div>
+
+<div id="hud-topright">
+  <div id="date-display">2002-04</div>
+  <div id="status-line"><span class="status-dot"></span>RECEIVING DATA</div>
+  <div id="global-tally" style="display:none;"></div>
+</div>
+
+<div id="cursor-readout"></div>
+
+<div id="layer-toggles">
+  <div class="layer-toggle active" id="toggle-land-only">
+    <div class="toggle-box">✓</div>
+    <span>LAND ONLY</span>
+  </div>
+  <div class="layer-toggle" id="toggle-trend">
+    <div class="toggle-box"></div>
+    <span>TREND (cm/yr)</span>
+  </div>
+  <div class="layer-toggle" id="toggle-sig-only" style="display:none;">
+    <div class="toggle-box"></div>
+    <span>SIGNIFICANT ONLY</span>
+  </div>
+  <div class="layer-toggle active" id="toggle-particles">
+    <div class="toggle-box">✓</div>
+    <span>DATA BARS</span>
+  </div>
+</div>
+
+<div id="globe-container"></div>
+
+<div id="timeline-bar">
+  <div id="timeline-row">
+    <button id="play-btn">&#9654;</button>
+    <button id="speed-btn">1×</button>
+    <input type="range" id="timeline" min="0" max="251" value="0" step="1">
+  </div>
+  <div id="time-labels">
+    <span>2002</span><span>2006</span><span>2010</span><span>2014</span><span>2018</span><span>2022</span><span>2026</span>
+  </div>
+</div>
+
+<div id="gap-indicator">⚠ DATA GAP — NO OBSERVATIONS</div>
+
+<div id="legend">
+  <span id="legend-min">−50</span>
+  <canvas id="legend-bar" width="100" height="6"></canvas>
+  <span id="legend-max">+50</span>
+  <span>cm EWH</span>
+</div>
+
+<div id="controls-hint"><span>DRAG</span> rotate · <span>SCROLL</span> zoom · <span>CLICK</span> inspect</div>
+
+<button id="tour-btn">GUIDED TOUR</button>
+<button id="method-btn">METHODOLOGY</button>
+
+<div id="tour-narration" class="bracketed">
+  <div id="tour-narration-bar">
+    <div id="tour-stop-label">STOP 1</div>
+    <div id="tour-progress">1 / 6</div>
+  </div>
+  <div id="tour-body">
+    <div id="tour-title"></div>
+    <div id="tour-text"></div>
+    <div id="tour-signal"></div>
+    <div id="tour-controls">
+      <button id="tour-exit">EXIT</button>
+      <div class="spacer"></div>
+      <button id="tour-prev">&#9664; PREV</button>
+      <button id="tour-next" class="primary">NEXT &#9654;</button>
+    </div>
+  </div>
+</div>
+
+<div id="info-panel" class="bracketed">
+  <div id="panel-bar">
+    <div id="panel-title"></div>
+    <button id="panel-close">&times;</button>
+  </div>
+  <div id="panel-body">
+    <div id="panel-meta"></div>
+    <div id="panel-stats">
+      <div class="stat-cell"><div class="stat-val" id="stat-current">—</div><div class="stat-label">Current</div></div>
+      <div class="stat-cell"><div class="stat-val" id="stat-trend">—</div><div class="stat-label">Trend/yr</div></div>
+      <div class="stat-cell"><div class="stat-val" id="stat-unc">—</div><div class="stat-label">Uncertainty</div></div>
+    </div>
+    <div id="chart-container"><canvas id="cell-chart"></canvas></div>
+    <div id="panel-note"></div>
+  </div>
+</div>
+
+<div id="region-labels"></div>
+
+<div id="method-overlay">
+  <div id="method-content" class="bracketed"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+// ============================================================
+// WEIGHT OF WEATHER — MISSION CONTROL
+// ============================================================
+
+let DATA = null;
+let scene, camera, renderer, globe;
+let dataTexture, dataCanvas, dataCtx;
+let cellChart = null;
+let currentTimeIndex = 0;
+let isPlaying = false;
+let playInterval = null;
+let selectedCell = null;
+let playSpeed = 150;
+const speeds = [150, 80, 40];
+const speedLabels = ['1×', '2×', '4×'];
+let speedIdx = 0;
+
+const CMIN = -50, CMAX = 50;
+let landOnly = true; // default: show land cells only
+let showTrend = false;
+let sigOnly = false; // hide non-significant trend cells entirely
+let cellTrends = null; // { trend, se, significant } per cell, computed at load
+
+// ============================================================
+// DATA LOAD
+// ============================================================
+async function loadData() {
+  document.getElementById('load-status').textContent = 'FETCHING MASCON GRID DATA';
+  const resp = await fetch('grace_tws_5deg.json');
+  if (!resp.ok) throw new Error('grace_tws_5deg.json not found. Place it alongside this HTML file.');
+  DATA = await resp.json();
+  document.getElementById('load-status').textContent = `LOADED ${DATA.cells.length} CELLS · ${DATA.times.length} EPOCHS`;
+  computeTrends();
+  buildCellGrid();
+}
+
+// ============================================================
+// COMPUTE OLS TRENDS PER CELL
+// ============================================================
+function computeTrends() {
+  cellTrends = [];
+  const n = DATA.times.length;
+  for (let c = 0; c < DATA.cells.length; c++) {
+    const cell = DATA.cells[c];
+    // Collect non-null data points with time in years
+    let sumX = 0, sumY = 0, sumXX = 0, sumXY = 0, count = 0;
+    for (let i = 0; i < n; i++) {
+      if (cell.tws[i] === null) continue;
+      const x = i / 12; // time in years
+      const y = cell.tws[i];
+      sumX += x; sumY += y; sumXX += x * x; sumXY += x * y;
+      count++;
+    }
+    if (count < 24) { // need at least 2 years of data
+      cellTrends.push({ trend: 0, se: Infinity, significant: false });
+      continue;
+    }
+    const meanX = sumX / count;
+    const meanY = sumY / count;
+    const Sxx = sumXX - count * meanX * meanX;
+    const Sxy = sumXY - count * meanX * meanY;
+    const slope = Sxy / Sxx; // cm per year
+
+    // Residual variance for standard error
+    let ssRes = 0;
+    for (let i = 0; i < n; i++) {
+      if (cell.tws[i] === null) continue;
+      const x = i / 12;
+      const pred = meanY + slope * (x - meanX);
+      ssRes += (cell.tws[i] - pred) ** 2;
+    }
+    const se = Math.sqrt(ssRes / (count - 2) / Sxx);
+    const tStat = Math.abs(slope / se);
+    const significant = tStat >= 1.96; // ~95% confidence
+
+    cellTrends.push({ trend: slope, se, significant });
+  }
+}
+
+// ============================================================
+// GLOBAL MASS TALLY (area-weighted sum → Gt/yr)
+// ============================================================
+function updateGlobalTally() {
+  const el = document.getElementById('global-tally');
+  if (!showTrend || !cellTrends) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+
+  const R = 6.371e6; // Earth radius in meters
+  const dPhi = 5 * Math.PI / 180;
+  const dLam = 5 * Math.PI / 180;
+
+  let totalGt = 0;
+  let sigCount = 0, totalCount = 0;
+  for (let c = 0; c < DATA.cells.length; c++) {
+    const cell = DATA.cells[c];
+    if (landOnly && cell.land_frac === 0) continue;
+    const ct = cellTrends[c];
+    if (!ct.significant) continue;
+
+    totalCount++;
+    sigCount++;
+    const latRad = cell.lat * Math.PI / 180;
+    const cellArea = R * R * dPhi * dLam * Math.cos(latRad); // m²
+    // cm/yr → kg/m²/yr: 1 cm EWH = 10 kg/m²
+    const massRate = ct.trend * 10 * cellArea; // kg/yr
+    totalGt += massRate / 1e12; // Gt/yr
+  }
+
+  const sign = totalGt > 0 ? '+' : '';
+  const color = totalGt < 0 ? 'var(--red)' : 'var(--cyan)';
+  el.style.color = color;
+  el.style.borderColor = totalGt < 0 ? 'rgba(255,49,49,0.2)' : 'rgba(0,245,255,0.2)';
+  el.style.background = totalGt < 0 ? 'rgba(255,49,49,0.04)' : 'rgba(0,245,255,0.04)';
+  el.innerHTML = `GLOBAL LAND BALANCE` +
+    `<span class="tally-value" style="color:${color}">${sign}${totalGt.toFixed(0)} Gt/yr</span>` +
+    `<span class="tally-note">${sigCount} significant cells · OLS 2002–2025<br>Trend computed across satellite gap (2017–2018)</span>`;
+}
+
+// ============================================================
+// COLOR: deep blue (gain) — near-black (zero) — hot red (loss)
+// Water-themed diverging through dark center
+// ============================================================
+function twsToColor(val) {
+  if (val === null || val === undefined || isNaN(val)) return [8, 8, 12];
+
+  const t = Math.max(-1, Math.min(1, val / CMAX));
+
+  let r, g, b;
+  if (t < 0) {
+    // Mass loss: dark -> warm red -> bright red
+    const s = Math.pow(-t, 0.7);
+    r = Math.round(15 + s * 240);
+    g = Math.round(15 + s * 20);
+    b = Math.round(20 + s * 15);
+  } else {
+    // Mass gain: dark -> deep blue -> bright cyan-blue
+    const s = Math.pow(t, 0.7);
+    r = Math.round(15 + s * 0);
+    g = Math.round(15 + s * 130);
+    b = Math.round(20 + s * 235);
+  }
+  return [r, g, b];
+}
+
+// Trend colormap: same diverging scheme but scaled to ±10 cm/yr
+const TREND_MAX = 10;
+function trendToColor(trend, significant) {
+  if (trend === 0 && !significant) return [5, 5, 8];
+  // In sig-only mode, completely hide non-significant cells
+  if (sigOnly && !significant) return [5, 5, 8];
+  const t = Math.max(-1, Math.min(1, trend / TREND_MAX));
+  let r, g, b;
+  if (t < 0) {
+    const s = Math.pow(-t, 0.7);
+    r = Math.round(15 + s * 240);
+    g = Math.round(15 + s * 20);
+    b = Math.round(20 + s * 15);
+  } else {
+    const s = Math.pow(t, 0.7);
+    r = Math.round(15 + s * 0);
+    g = Math.round(15 + s * 130);
+    b = Math.round(20 + s * 235);
+  }
+  // Desaturate non-significant cells
+  if (!significant) {
+    r = Math.round(r * 0.25 + 8 * 0.75);
+    g = Math.round(g * 0.25 + 8 * 0.75);
+    b = Math.round(b * 0.25 + 12 * 0.75);
+  }
+  return [r, g, b];
+}
+
+// ============================================================
+// DATA TEXTURE
+// ============================================================
+function initDataTexture() {
+  dataCanvas = document.createElement('canvas');
+  dataCanvas.width = 360;   // 5x upscale from 72
+  dataCanvas.height = 180;  // 5x upscale from 36
+  dataCtx = dataCanvas.getContext('2d');
+  dataTexture = new THREE.CanvasTexture(dataCanvas);
+  dataTexture.magFilter = THREE.LinearFilter;
+  dataTexture.minFilter = THREE.LinearFilter;
+  dataTexture.wrapS = THREE.RepeatWrapping;
+  // flipY defaults to true: row 0 (north) -> v=1 (north pole). Correct.
+}
+
+function updateDataTexture(timeIdx) {
+  // First render to small 72x36 grid
+  const small = new Uint8ClampedArray(72 * 36 * 4);
+  for (let c = 0; c < DATA.cells.length; c++) {
+    const cell = DATA.cells[c];
+    const px = Math.round((cell.lon - 2.5) / 5);
+    const py = Math.round((87.5 - cell.lat) / 5);
+    if (px >= 0 && px < 72 && py >= 0 && py < 36) {
+      // Skip ocean cells in land-only mode
+      if (landOnly && cell.land_frac === 0) {
+        const idx = (py * 72 + px) * 4;
+        small[idx] = 5; small[idx+1] = 5; small[idx+2] = 8; small[idx+3] = 255;
+        continue;
+      }
+      const [r, g, b] = showTrend
+        ? trendToColor(cellTrends[c].trend, cellTrends[c].significant)
+        : twsToColor(cell.tws[timeIdx]);
+      const idx = (py * 72 + px) * 4;
+      small[idx] = r; small[idx+1] = g; small[idx+2] = b; small[idx+3] = 255;
+    }
+  }
+  // Bilinear upscale to 360x180
+  const W = 360, H = 180, sw = 72, sh = 36;
+  const imgData = dataCtx.createImageData(W, H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      // Map back to source coordinates
+      const sx = (x + 0.5) * sw / W - 0.5;
+      const sy = (y + 0.5) * sh / H - 0.5;
+      const x0 = Math.floor(sx), y0 = Math.floor(sy);
+      const x1 = Math.min(x0 + 1, sw - 1), y1 = Math.min(y0 + 1, sh - 1);
+      const fx = sx - x0, fy = sy - y0;
+      const cx0 = Math.max(x0, 0), cy0 = Math.max(y0, 0);
+
+      const i00 = (cy0 * sw + cx0) * 4;
+      const i10 = (cy0 * sw + x1) * 4;
+      const i01 = (y1 * sw + cx0) * 4;
+      const i11 = (y1 * sw + x1) * 4;
+
+      const di = (y * W + x) * 4;
+      for (let ch = 0; ch < 3; ch++) {
+        const v = (1-fx)*(1-fy)*small[i00+ch] + fx*(1-fy)*small[i10+ch]
+                + (1-fx)*fy*small[i01+ch] + fx*fy*small[i11+ch];
+        imgData.data[di+ch] = Math.round(v);
+      }
+      imgData.data[di+3] = 255;
+    }
+  }
+  dataCtx.putImageData(imgData, 0, 0);
+  dataTexture.needsUpdate = true;
+}
+
+// ============================================================
+// COASTLINES
+// ============================================================
+function loadCoastlineTexture() {
+  return new Promise((resolve) => {
+    const loader = new THREE.TextureLoader();
+    loader.load('coastlines.png', (tex) => {
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.minFilter = THREE.LinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      tex.flipY = false;  // PNG has south at row 0 (NetCDF lat order). flipY=false maps row 0 -> v=0 (south).
+      resolve(tex);
+    }, undefined, () => {
+      // Fallback: generate from land_frac if PNG not found
+      console.warn('coastlines.png not found, generating from land_frac');
+      resolve(createFallbackCoastlines());
+    });
+  });
+}
+
+function createFallbackCoastlines() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 720; canvas.height = 360;
+  const ctx = canvas.getContext('2d');
+  const grid = new Float32Array(36 * 72);
+  DATA.cells.forEach(cell => {
+    const px = Math.round((cell.lon - 2.5) / 5);
+    const py = Math.round((87.5 - cell.lat) / 5);
+    if (px >= 0 && px < 72 && py >= 0 && py < 36) grid[py * 72 + px] = cell.land_frac;
+  });
+  ctx.strokeStyle = 'rgba(200, 240, 255, 0.25)';
+  ctx.lineWidth = 1;
+  for (let y = 0; y < 36; y++) {
+    for (let x = 0; x < 72; x++) {
+      if (grid[y * 72 + x] <= 0) continue;
+      const sx = x * 10, sy = y * 10;
+      const l = x > 0 ? grid[y * 72 + x - 1] : 0;
+      const r = x < 71 ? grid[y * 72 + x + 1] : 0;
+      const u = y > 0 ? grid[(y - 1) * 72 + x] : 0;
+      const d = y < 35 ? grid[(y + 1) * 72 + x] : 0;
+      ctx.beginPath();
+      if (l <= 0) { ctx.moveTo(sx, sy); ctx.lineTo(sx, sy + 10); }
+      if (r <= 0) { ctx.moveTo(sx + 10, sy); ctx.lineTo(sx + 10, sy + 10); }
+      if (u <= 0) { ctx.moveTo(sx, sy); ctx.lineTo(sx + 10, sy); }
+      if (d <= 0) { ctx.moveTo(sx, sy + 10); ctx.lineTo(sx + 10, sy + 10); }
+      ctx.stroke();
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  return tex;
+}
+
+// ============================================================
+// SCENE
+// ============================================================
+async function initScene() {
+  const container = document.getElementById('globe-container');
+  const w = window.innerWidth, h = window.innerHeight;
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(42, w / h, 0.1, 100);
+  camera.position.set(0, 0.15, 3.0);
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(w, h);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x000000, 0);
+  container.appendChild(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+  const dirL = new THREE.DirectionalLight(0xeef4ff, 0.4);
+  dirL.position.set(5, 2, 5);
+  scene.add(dirL);
+
+  initDataTexture();
+  updateDataTexture(0);
+  const coastTex = await loadCoastlineTexture();
+
+  // Load satellite Earth texture
+  const earthTex = await new Promise((resolve) => {
+    new THREE.TextureLoader().load(
+      'https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg',
+      (tex) => { tex.anisotropy = renderer.capabilities.getMaxAnisotropy(); resolve(tex); },
+      undefined,
+      () => { console.warn('Earth texture failed to load, using fallback'); resolve(null); }
+    );
+  });
+
+  const geo = new THREE.SphereGeometry(1, 64, 64);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      earthMap: { value: earthTex },
+      coastMap: { value: coastTex },
+      dataMap: { value: dataTexture },
+      uShowData: { value: 1.0 },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      void main() {
+        vUv = uv;
+        vNormal = normalize(normalMatrix * normal);
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vViewDir = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D earthMap;
+      uniform sampler2D coastMap;
+      uniform sampler2D dataMap;
+      uniform float uShowData;
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      void main() {
+        // Earth texture: no shift (Blue Marble has prime meridian at center)
+        vec2 earthUv = vUv;
+
+        // Data + coast textures: shifted to match our data pipeline
+        vec2 dataUv = vUv;
+        dataUv.x = fract(vUv.x + 0.5);
+
+        vec3 earth = texture2D(earthMap, earthUv).rgb;
+        vec4 coast = texture2D(coastMap, dataUv);
+        vec4 data = texture2D(dataMap, dataUv);
+
+        // Base: satellite texture, slightly toned down
+        vec3 color = earth * 0.6;
+        float grey = dot(color, vec3(0.299, 0.587, 0.114));
+        color = mix(color, vec3(grey), 0.2);
+
+        // Blend data overlay when trend/data mode active
+        if (uShowData > 0.5) {
+          float dataStrength = max(data.r, max(data.g, data.b));
+          float blend = smoothstep(0.02, 0.15, dataStrength);
+          color = mix(color, data.rgb, blend * 0.85);
+        }
+
+        // Coastline outlines
+        color = mix(color, coast.rgb * 0.7, coast.a * 0.4);
+
+        // Fresnel rim — cyan edge glow
+        float rim = 1.0 - max(0.0, dot(vNormal, vViewDir));
+        float fresnelGlow = pow(rim, 3.5) * 0.3;
+        color += vec3(0.0, 0.8, 1.0) * fresnelGlow;
+
+        // Subtle diffuse shading
+        float diff = 0.75 + 0.25 * dot(vNormal, normalize(vec3(1.0, 0.4, 0.8)));
+        color *= diff;
+
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `
+  });
+
+  globe = new THREE.Mesh(geo, mat);
+  globe.rotation.y = -Math.PI / 2;
+  scene.add(globe);
+
+  // Atmosphere shell
+  const atmosGeo = new THREE.SphereGeometry(1.02, 64, 64);
+  const atmosMat = new THREE.ShaderMaterial({
+    vertexShader: `
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      void main() {
+        vNormal = normalize(normalMatrix * normal);
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vViewDir = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      void main() {
+        float rim = 1.0 - max(0.0, dot(vNormal, vViewDir));
+        float glow = pow(rim, 5.0);
+        gl_FragColor = vec4(0.0, 0.6, 0.8, glow * 0.25);
+      }
+    `,
+    side: THREE.BackSide,
+    transparent: true
+  });
+  scene.add(new THREE.Mesh(atmosGeo, atmosMat));
+
+  // ---- MASS FLUX PARTICLES ----
+  initParticles();
+
+  // ---- AMBIENT DUST ----
+  initDustParticles();
+
+  // Stars: using CSS background image (stars.jpg)
+
+  window.addEventListener('resize', () => {
+    const w = window.innerWidth, h = window.innerHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  });
+}
+
+// ============================================================
+// CONTROLS
+// ============================================================
+let isDragging = false, prevMouse = { x: 0, y: 0 }, autoRotate = true;
+const raycaster = new THREE.Raycaster();
+const mouseVec = new THREE.Vector2();
+
+function initControls() {
+  const el = renderer.domElement;
+  el.addEventListener('mousedown', (e) => {
+    isDragging = true; autoRotate = false;
+    prevMouse = { x: e.clientX, y: e.clientY };
+  });
+  window.addEventListener('mousemove', (e) => {
+    updateCursorReadout(e);
+    if (!isDragging) return;
+    globe.rotation.y += (e.clientX - prevMouse.x) * 0.005;
+    globe.rotation.x = Math.max(-1.2, Math.min(1.2,
+      globe.rotation.x + (e.clientY - prevMouse.y) * 0.005));
+    prevMouse = { x: e.clientX, y: e.clientY };
+  });
+  window.addEventListener('mouseup', () => isDragging = false);
+  el.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    camera.position.z = Math.max(1.5, Math.min(5, camera.position.z + e.deltaY * 0.002));
+  }, { passive: false });
+  el.addEventListener('click', onGlobeClick);
+}
+
+// ============================================================
+// CURSOR READOUT — lat/lon/tws follows mouse
+// ============================================================
+function updateCursorReadout(e) {
+  const box = document.getElementById('cursor-readout');
+  if (!globe) return;
+
+  mouseVec.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouseVec.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouseVec, camera);
+  const hits = raycaster.intersectObject(globe);
+
+  if (!hits.length) { box.style.display = 'none'; return; }
+
+  const pt = hits[0].point.clone();
+  pt.applyMatrix4(new THREE.Matrix4().copy(globe.matrixWorld).invert());
+  const lat = Math.asin(pt.y) * (180 / Math.PI);
+  // With shader UV +0.5 fix: point (1,0,0) = lon 0°, so lon = atan2(-z, x)
+  const lon = ((Math.atan2(-pt.z, pt.x) * (180 / Math.PI)) + 360) % 360;
+
+  // Find nearest cell
+  let best = null, bestD = Infinity;
+  for (const c of DATA.cells) {
+    const d = Math.abs(c.lat - lat) + Math.abs(c.lon - lon);
+    if (d < bestD) { bestD = d; best = c; }
+  }
+
+  if (best) {
+    const latS = best.lat >= 0 ? `${best.lat.toFixed(1)}N` : `${Math.abs(best.lat).toFixed(1)}S`;
+    const lonS = best.lon > 180 ? `${(360 - best.lon).toFixed(1)}W` : `${best.lon.toFixed(1)}E`;
+    let valS;
+    if (showTrend) {
+      const ci = DATA.cells.indexOf(best);
+      const t = cellTrends[ci];
+      valS = `${t.trend > 0 ? '+' : ''}${t.trend.toFixed(2)} cm/yr` + (t.significant ? '' : ' (n.s.)');
+    } else {
+      const v = best.tws[currentTimeIndex];
+      valS = v !== null ? `${v > 0 ? '+' : ''}${v.toFixed(1)} cm` : 'NO DATA';
+    }
+    box.textContent = `${latS} ${lonS} · ${valS}`;
+    box.style.display = 'block';
+    box.style.left = (e.clientX + 16) + 'px';
+    box.style.top = (e.clientY - 8) + 'px';
+  }
+}
+
+// ============================================================
+// CLICK → PANEL
+// ============================================================
+function onGlobeClick(e) {
+  mouseVec.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouseVec.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouseVec, camera);
+  const hits = raycaster.intersectObject(globe);
+  if (!hits.length) return;
+
+  const pt = hits[0].point.clone();
+  pt.applyMatrix4(new THREE.Matrix4().copy(globe.matrixWorld).invert());
+  const lat = Math.asin(pt.y) * (180 / Math.PI);
+  const lon = ((Math.atan2(-pt.z, pt.x) * (180 / Math.PI)) + 360) % 360;
+
+  let best = null, bestD = Infinity;
+  for (const c of DATA.cells) {
+    const d = Math.abs(c.lat - lat) + Math.abs(c.lon - lon);
+    if (d < bestD) { bestD = d; best = c; }
+  }
+  if (best) { selectedCell = best; showPanel(best); }
+}
+
+// ============================================================
+// DATA PANEL
+// ============================================================
+function showPanel(cell) {
+  document.getElementById('info-panel').classList.add('visible');
+
+  const lonStr = cell.lon > 180 ? `${(360 - cell.lon).toFixed(1)}°W` : `${cell.lon.toFixed(1)}°E`;
+  const latStr = cell.lat >= 0 ? `${cell.lat.toFixed(1)}°N` : `${Math.abs(cell.lat).toFixed(1)}°S`;
+  document.getElementById('panel-title').textContent = `${latStr}  ${lonStr}`;
+
+  const lp = (cell.land_frac * 100).toFixed(0);
+  document.getElementById('panel-meta').textContent =
+    `Land fraction ${lp}% · ${DATA.metadata.resolution_display} · Baseline ${DATA.metadata.baseline}`;
+  document.getElementById('panel-note').textContent = DATA.metadata.note;
+
+  updatePanelStats(cell);
+
+  // Chart
+  const ctx = document.getElementById('cell-chart').getContext('2d');
+  if (cellChart) cellChart.destroy();
+
+  const twsPts = [], uncUpPts = [], uncDnPts = [];
+  DATA.times.forEach((t, i) => {
+    if (cell.tws[i] !== null) {
+      twsPts.push({ x: t, y: cell.tws[i] });
+      if (cell.unc[i] !== null) {
+        uncUpPts.push({ x: t, y: cell.tws[i] + cell.unc[i] });
+        uncDnPts.push({ x: t, y: cell.tws[i] - cell.unc[i] });
+      }
+    }
+  });
+
+  // Compute regression line points
+  const ci = DATA.cells.indexOf(cell);
+  const ct = cellTrends ? cellTrends[ci] : null;
+  const regPts = [];
+  if (ct && ct.se !== Infinity) {
+    // Find first and last non-null indices for line endpoints
+    const fi = cell.tws.findIndex(x => x !== null);
+    const li = cell.tws.length - 1 - [...cell.tws].reverse().findIndex(x => x !== null);
+    if (fi >= 0 && li > fi) {
+      const meanIdx = (fi + li) / 2;
+      const meanY = cell.tws.filter(v => v !== null).reduce((a, b) => a + b, 0) /
+                     cell.tws.filter(v => v !== null).length;
+      // Plot line at start, middle, and end for Chart.js to interpolate
+      [fi, Math.round(meanIdx), li].forEach(i => {
+        const yrsFromMean = (i - meanIdx) / 12;
+        regPts.push({ x: DATA.times[i], y: meanY + ct.trend * yrsFromMean });
+      });
+    }
+  }
+
+  cellChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          data: uncUpPts,
+          borderColor: 'transparent',
+          backgroundColor: 'rgba(0, 245, 255, 0.04)',
+          fill: '+1',
+          pointRadius: 0
+        },
+        {
+          label: 'TWS',
+          data: twsPts,
+          borderColor: '#00f5ff',
+          borderWidth: 1,
+          pointRadius: 0,
+          tension: 0.1,
+          fill: false
+        },
+        {
+          data: uncDnPts,
+          borderColor: 'transparent',
+          backgroundColor: 'rgba(0, 245, 255, 0.04)',
+          fill: '-1',
+          pointRadius: 0
+        },
+        {
+          label: 'Trend',
+          data: regPts,
+          borderColor: ct && ct.significant ? 'rgba(255, 200, 50, 0.8)' : 'rgba(255, 200, 50, 0.3)',
+          borderWidth: 1.5,
+          borderDash: [6, 3],
+          pointRadius: 0,
+          fill: false,
+          tension: 0
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(5,5,5,0.9)',
+          titleFont: { family: 'JetBrains Mono', size: 9 },
+          bodyFont: { family: 'JetBrains Mono', size: 9 },
+          borderColor: 'rgba(0,245,255,0.15)',
+          borderWidth: 1,
+          callbacks: { label: c => c.dataset.label === 'TWS' ? `${c.parsed.y.toFixed(1)} cm EWH` : c.dataset.label === 'Trend' ? `Trend: ${c.parsed.y.toFixed(1)} cm` : null }
+        }
+      },
+      scales: {
+        x: {
+          type: 'category',
+          labels: DATA.times,
+          ticks: { maxTicksLimit: 5, color: '#6b6b7b', font: { family: 'JetBrains Mono', size: 8 } },
+          grid: { display: false }
+        },
+        y: {
+          ticks: { color: '#6b6b7b', font: { family: 'JetBrains Mono', size: 8 } },
+          grid: {
+            color: (ctx) => ctx.tick.value === 0 ? 'rgba(255,255,255,0.15)' : 'transparent',
+            lineWidth: (ctx) => ctx.tick.value === 0 ? 1 : 0
+          }
+        }
+      }
+    }
+  });
+}
+
+function updatePanelStats(cell) {
+  const v = cell.tws[currentTimeIndex];
+  const u = cell.unc[currentTimeIndex];
+
+  const statCur = document.getElementById('stat-current');
+  statCur.textContent = v !== null ? `${v > 0 ? '+' : ''}${v.toFixed(1)}` : '—';
+  statCur.className = 'stat-val' + (v !== null ? (v < 0 ? ' negative' : ' positive') : '');
+
+  document.getElementById('stat-unc').textContent = u !== null ? `±${u.toFixed(1)}` : '—';
+
+  const fi = cell.tws.findIndex(x => x !== null);
+  const li = cell.tws.length - 1 - [...cell.tws].reverse().findIndex(x => x !== null);
+  const statTrend = document.getElementById('stat-trend');
+  if (fi >= 0 && li > fi) {
+    const yrs = (li - fi) / 12;
+    const trend = (cell.tws[li] - cell.tws[fi]) / yrs;
+    statTrend.textContent = `${trend > 0 ? '+' : ''}${trend.toFixed(1)}`;
+    statTrend.className = 'stat-val' + (trend < 0 ? ' negative' : ' positive');
+  } else {
+    statTrend.textContent = '—';
+    statTrend.className = 'stat-val';
+  }
+}
+
+document.getElementById('panel-close').addEventListener('click', () => {
+  document.getElementById('info-panel').classList.remove('visible');
+  selectedCell = null;
+});
+
+// ============================================================
+// TIMELINE
+// ============================================================
+function initTimeline() {
+  document.getElementById('timeline').max = DATA.times.length - 1;
+  document.getElementById('timeline').addEventListener('input', (e) => {
+    currentTimeIndex = parseInt(e.target.value);
+    updateTimeStep();
+  });
+  document.getElementById('play-btn').addEventListener('click', togglePlay);
+  document.getElementById('speed-btn').addEventListener('click', () => {
+    speedIdx = (speedIdx + 1) % speeds.length;
+    playSpeed = speeds[speedIdx];
+    document.getElementById('speed-btn').textContent = speedLabels[speedIdx];
+    if (isPlaying) { clearInterval(playInterval); startPlay(); }
+  });
+}
+
+function togglePlay() {
+  isPlaying = !isPlaying;
+  document.getElementById('play-btn').innerHTML = isPlaying ? '&#9646;&#9646;' : '&#9654;';
+  if (isPlaying) startPlay(); else clearInterval(playInterval);
+}
+function startPlay() {
+  playInterval = setInterval(() => {
+    currentTimeIndex = (currentTimeIndex + 1) % DATA.times.length;
+    document.getElementById('timeline').value = currentTimeIndex;
+    updateTimeStep();
+  }, playSpeed);
+}
+
+function updateTimeStep() {
+  updateDataTexture(currentTimeIndex);
+  document.getElementById('date-display').textContent = DATA.times[currentTimeIndex];
+  updateCloudFromData();
+
+  const isGap = DATA.missing_months.includes(DATA.times[currentTimeIndex]);
+  document.getElementById('gap-indicator').style.display = isGap ? 'block' : 'none';
+
+  const dot = document.querySelector('.status-dot');
+  if (isGap) {
+    dot.classList.add('gap');
+    document.getElementById('status-line').innerHTML =
+      '<span class="status-dot gap"></span>SIGNAL LOST — INTER-MISSION GAP';
+  } else {
+    dot.classList.remove('gap');
+    document.getElementById('status-line').innerHTML =
+      '<span class="status-dot"></span>RECEIVING DATA';
+  }
+
+  if (selectedCell) updatePanelStats(selectedCell);
+}
+
+// ============================================================
+// LEGEND
+// ============================================================
+function initLegend() { repaintLegend(); }
+
+function repaintLegend() {
+  const canvas = document.getElementById('legend-bar');
+  const ctx = canvas.getContext('2d');
+  const cmin = showTrend ? -TREND_MAX : CMIN;
+  const cmax = showTrend ? TREND_MAX : CMAX;
+  for (let x = 0; x < 100; x++) {
+    const val = cmin + (x / 99) * (cmax - cmin);
+    const [r, g, b] = showTrend ? trendToColor(val, true) : twsToColor(val);
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(x, 0, 1, 6);
+  }
+}
+
+// ============================================================
+// METHODOLOGY
+// ============================================================
+function initMethodology() {
+  const m = DATA.metadata;
+  document.getElementById('method-content').innerHTML = `
+    <h2>Methodology &amp; Data Provenance</h2>
+    <div class="method-field"><div class="mf-label">SOURCE</div><div class="mf-val">${m.source}</div></div>
+    <div class="method-field"><div class="mf-label">DOI</div><div class="mf-val">${m.doi}</div></div>
+    <div class="method-field"><div class="mf-label">NATIVE RESOLUTION</div><div class="mf-val">${m.resolution_native}</div></div>
+    <div class="method-field"><div class="mf-label">DISPLAY RESOLUTION</div><div class="mf-val">${m.resolution_display} · ${m.effective_resolution}</div></div>
+    <div class="method-field"><div class="mf-label">BASELINE REMOVED</div><div class="mf-val">${m.baseline}</div></div>
+    <div class="method-field"><div class="mf-label">GIA MODEL</div><div class="mf-val">${m.gia_model}</div></div>
+    <div class="method-field"><div class="mf-label">CRI FILTER</div><div class="mf-val">Applied. ${m.coastal_warning}</div></div>
+    <div class="method-field"><div class="mf-label">UNCERTAINTY METHOD</div><div class="mf-val">${m.uncertainty_method}</div></div>
+    <div class="method-field"><div class="mf-label">NOTE</div><div class="mf-val">${m.note}</div></div>
+    <button id="method-close-btn">CLOSE</button>
+  `;
+  document.getElementById('method-close-btn').addEventListener('click', () => {
+    document.getElementById('method-overlay').classList.remove('visible');
+  });
+  document.getElementById('method-btn').addEventListener('click', () => {
+    document.getElementById('method-overlay').classList.add('visible');
+  });
+  document.getElementById('method-overlay').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) e.currentTarget.classList.remove('visible');
+  });
+}
+
+// ============================================================
+// FLY-TO ANIMATION
+// ============================================================
+let flyAnimation = null;
+
+function flyTo(lat, lon, zoomDist) {
+  autoRotate = false;
+  const lonRad = lon * Math.PI / 180;
+  const latRad = lat * Math.PI / 180;
+
+  // Target rotation to face this lat/lon toward camera
+  const targetRotY = -lonRad - Math.PI / 2;
+  const targetRotX = latRad * 0.8; // Slight damping so extreme latitudes don't over-tilt
+  const targetZoom = zoomDist || 2.2;
+
+  // Find shortest rotation path (handle wrapping)
+  const currentY = globe.rotation.y;
+  let deltaY = targetRotY - currentY;
+  // Normalize to [-PI, PI]
+  while (deltaY > Math.PI) deltaY -= 2 * Math.PI;
+  while (deltaY < -Math.PI) deltaY += 2 * Math.PI;
+  const startRotY = currentY;
+  const endRotY = currentY + deltaY;
+
+  const startRotX = globe.rotation.x;
+  const startZoom = camera.position.z;
+  const startTime = performance.now();
+  const duration = 1200; // ms
+
+  flyAnimation = { startRotY, endRotY, startRotX, targetRotX, startZoom, targetZoom, startTime, duration };
+}
+
+function updateFlyAnimation() {
+  if (!flyAnimation) return;
+  const { startRotY, endRotY, startRotX, targetRotX, startZoom, targetZoom, startTime, duration } = flyAnimation;
+  const elapsed = performance.now() - startTime;
+  const t = Math.min(1, elapsed / duration);
+
+  // Ease-out cubic
+  const e = 1 - Math.pow(1 - t, 3);
+
+  globe.rotation.y = startRotY + (endRotY - startRotY) * e;
+  globe.rotation.x = startRotX + (targetRotX - startRotX) * e;
+  camera.position.z = startZoom + (targetZoom - startZoom) * e;
+
+  if (t >= 1) flyAnimation = null;
+}
+
+// ============================================================
+// REGION LABELS
+// ============================================================
+const REGIONS = [
+  { name: 'Greenland',     lat: 72,  lon: 316, desc: 'Ice sheet mass loss' },
+  { name: 'W. Antarctica',  lat: -78, lon: 262, desc: 'Ice sheet collapse zone' },
+  { name: 'Amazon Basin',   lat: -5,  lon: 300, desc: 'Seasonal water cycling' },
+  { name: 'N. India',       lat: 26,  lon: 80,  desc: 'Groundwater depletion' },
+  { name: 'Congo Basin',    lat: 0,   lon: 22,  desc: 'Tropical water storage' },
+  { name: 'Caspian Sea',    lat: 42,  lon: 51,  desc: 'Endorheic basin decline' },
+  { name: 'California',     lat: 37,  lon: 239, desc: 'Drought & groundwater' },
+  { name: 'SE Australia',   lat: -30, lon: 145, desc: 'Millennium drought signal' },
+];
+
+let regionLabels = [];
+
+function initRegionLabels() {
+  const container = document.getElementById('region-labels');
+  REGIONS.forEach((reg, i) => {
+    const el = document.createElement('div');
+    el.className = 'region-label';
+    el.innerHTML = `<span class="region-dot"></span>${reg.name}`;
+    el.title = reg.desc;
+    el.addEventListener('click', () => {
+      // Fly globe to this region
+      flyTo(reg.lat, reg.lon, 2.2);
+      // Find nearest cell and open panel
+      let best = null, bestD = Infinity;
+      for (const c of DATA.cells) {
+        const d = Math.abs(c.lat - reg.lat) + Math.abs(c.lon - reg.lon);
+        if (d < bestD) { bestD = d; best = c; }
+      }
+      if (best) { selectedCell = best; showPanel(best); }
+    });
+    container.appendChild(el);
+    regionLabels.push({ el, lat: reg.lat, lon: reg.lon });
+  });
+}
+
+function updateRegionLabels() {
+  if (!globe || !camera) return;
+
+  regionLabels.forEach(({ el, lat, lon }) => {
+    // Inverse of raycaster: lon = atan2(-z, x)  →  x = cos(lat)*cos(lon), z = -cos(lat)*sin(lon)
+    const latRad = lat * Math.PI / 180;
+    const lonRad = lon * Math.PI / 180;
+    const pos = new THREE.Vector3(
+       Math.cos(latRad) * Math.cos(lonRad),
+       Math.sin(latRad),
+      -Math.cos(latRad) * Math.sin(lonRad)
+    );
+    // Push label slightly above surface to reduce parallax at different zoom levels
+    pos.multiplyScalar(1.01);
+
+    // Apply globe rotation to get world position
+    pos.applyMatrix4(globe.matrixWorld);
+
+    // Check if point faces camera
+    const camDir = new THREE.Vector3().subVectors(camera.position, pos).normalize();
+    const normal = pos.clone().normalize();
+    const dot = camDir.dot(normal);
+
+    if (dot < 0.15) {
+      el.style.opacity = '0';
+      el.style.pointerEvents = 'none';
+      return;
+    }
+
+    // Project to screen
+    const projected = pos.clone().project(camera);
+    const x = (projected.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (-projected.y * 0.5 + 0.5) * window.innerHeight;
+
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.style.opacity = Math.min(1, (dot - 0.15) * 3).toFixed(2);
+    el.style.pointerEvents = 'auto';
+  });
+}
+
+// ============================================================
+// LAYER TOGGLES
+// ============================================================
+function initLayerToggles() {
+  const landToggle = document.getElementById('toggle-land-only');
+  landToggle.addEventListener('click', () => {
+    landOnly = !landOnly;
+    landToggle.classList.toggle('active', landOnly);
+    landToggle.querySelector('.toggle-box').textContent = landOnly ? '✓' : '';
+    updateDataTexture(currentTimeIndex);
+    if (showTrend) updateGlobalTally();
+  });
+
+  const trendToggle = document.getElementById('toggle-trend');
+  const sigToggle = document.getElementById('toggle-sig-only');
+
+  trendToggle.addEventListener('click', () => {
+    showTrend = !showTrend;
+    trendToggle.classList.toggle('active', showTrend);
+    trendToggle.querySelector('.toggle-box').textContent = showTrend ? '✓' : '';
+    // Show/hide sig-only toggle
+    sigToggle.style.display = showTrend ? 'flex' : 'none';
+    if (!showTrend) { sigOnly = false; sigToggle.classList.remove('active'); sigToggle.querySelector('.toggle-box').textContent = ''; }
+    updateDataTexture(currentTimeIndex);
+    repaintLegend();
+    updateGlobalTally();
+    // Update legend labels
+    if (showTrend) {
+      document.getElementById('legend-min').textContent = '−10';
+      document.getElementById('legend-max').textContent = '+10';
+      document.querySelector('#legend span:last-child').textContent = 'cm/yr';
+    } else {
+      document.getElementById('legend-min').textContent = '−50';
+      document.getElementById('legend-max').textContent = '+50';
+      document.querySelector('#legend span:last-child').textContent = 'cm EWH';
+    }
+  });
+
+  sigToggle.addEventListener('click', () => {
+    sigOnly = !sigOnly;
+    sigToggle.classList.toggle('active', sigOnly);
+    sigToggle.querySelector('.toggle-box').textContent = sigOnly ? '✓' : '';
+    updateDataTexture(currentTimeIndex);
+  });
+
+  const particleToggle = document.getElementById('toggle-particles');
+  particleToggle.addEventListener('click', () => {
+    particlesEnabled = !particlesEnabled;
+    particleToggle.classList.toggle('active', particlesEnabled);
+    particleToggle.querySelector('.toggle-box').textContent = particlesEnabled ? '✓' : '';
+    if (gridShell) gridShell.visible = particlesEnabled;
+    if (barMesh) barMesh.visible = particlesEnabled;
+  });
+}
+
+// ============================================================
+// GUIDED TOUR
+// ============================================================
+const TOUR_STOPS = [
+  {
+    name: 'OVERVIEW',
+    title: 'The Weight of Weather',
+    text: 'Every month, NASA\'s GRACE satellites weigh the Earth from orbit. By tracking tiny shifts in gravity, they measure how billions of tonnes of water move across continents — monsoons filling river basins, ice sheets melting into the sea, aquifers being pumped dry. This globe shows 23 years of that record. Blue is mass gained. Red is mass lost.',
+    signal: 'DATA: Terrestrial Water Storage anomalies, cm equivalent water height. Baseline: 2004.0–2010.0 mean removed.',
+    lat: 20, lon: 0, zoom: 3.0,
+    timeLabel: '2002-04',
+    playRange: null // don't auto-play, just show start
+  },
+  {
+    name: 'GREENLAND',
+    title: 'Greenland — Ice in Freefall',
+    text: 'Greenland\'s ice sheet has lost over 4,700 gigatonnes since 2002 — enough to raise global sea level by 13 mm. Watch the signal deepen from pale pink to saturated red as the cumulative loss accelerates. The trend is approximately −270 Gt/year and not slowing down.',
+    signal: 'SIGNAL: Persistent negative trend, no seasonal recovery. Cell at 72.5°N shows −18 cm/yr.',
+    lat: 72, lon: 316, zoom: 2.0,
+    timeLabel: '2002-04',
+    playRange: ['2002-04', '2025-12'],
+    playSpeed: 60
+  },
+  {
+    name: 'AMAZON BASIN',
+    title: 'Amazon — The Breathing Continent',
+    text: 'South America visibly pulses with the seasons. During the wet season (Dec–May), the Amazon basin absorbs enormous quantities of water — TWS swings by ±40 cm in some cells. This is the largest seasonal hydrological signal on Earth. You\'re literally watching the continent breathe.',
+    signal: 'SIGNAL: Seasonal amplitude ±35–45 cm. Peak storage: Mar–Apr. Minimum: Sep–Oct.',
+    lat: -5, lon: 300, zoom: 2.2,
+    timeLabel: '2019-01',
+    playRange: ['2019-01', '2020-12'],
+    playSpeed: 200
+  },
+  {
+    name: 'N. INDIA',
+    title: 'Northern India — Groundwater Crisis',
+    text: 'Northern India shows two superimposed signals: a massive seasonal monsoon pulse (Jun–Sep) as rain recharges the Ganges basin, and beneath it, a secular downward trend from groundwater extraction. Over 600 million people depend on these aquifers. The long-term trend is deeply negative — the monsoon rains cannot keep up with pumping.',
+    signal: 'SIGNAL: Seasonal monsoon +20 cm overlaid on −2 cm/yr depletion trend. Net storage declining since 2002.',
+    lat: 26, lon: 80, zoom: 2.3,
+    timeLabel: '2018-06',
+    playRange: ['2018-01', '2021-12'],
+    playSpeed: 180
+  },
+  {
+    name: 'W. ANTARCTICA',
+    title: 'West Antarctica — Point of No Return',
+    text: 'The Amundsen Sea sector of West Antarctica contains the most extreme mass loss signal in the entire GRACE record. Pine Island and Thwaites glaciers are losing ice at rates that have tripled since the 1990s. This cell shows the lowest TWS value in the dataset: −542 cm. Marine ice sheet instability may already be underway.',
+    signal: 'SIGNAL: Strongest sustained negative anomaly on Earth. Cell at 77.5°S, 262.5°E: −542 cm by 2025.',
+    lat: -78, lon: 262, zoom: 2.0,
+    timeLabel: '2002-04',
+    playRange: ['2002-04', '2025-12'],
+    playSpeed: 50
+  },
+  {
+    name: 'CALIFORNIA',
+    title: 'California — Drought Signature',
+    text: 'California\'s Central Valley is one of the world\'s most productive agricultural regions and one of its most water-stressed. GRACE captures the 2012–2016 drought as a deepening red stain, followed by partial recovery during wet winters, then renewed loss. The signal is a direct readout of aquifer depletion under irrigation demand.',
+    signal: 'SIGNAL: Multi-year drought (2012–2016) visible as cumulative −15 cm. Partial recovery 2017, then renewed stress.',
+    lat: 37, lon: 239, zoom: 2.3,
+    timeLabel: '2012-01',
+    playRange: ['2012-01', '2020-12'],
+    playSpeed: 150
+  }
+];
+
+let tourActive = false;
+let tourStopIdx = 0;
+let tourPlayTimer = null;
+let tourTimeStart = 0;
+let tourTimeEnd = 0;
+
+function findTimeIndex(label) {
+  const idx = DATA.times.indexOf(label);
+  return idx >= 0 ? idx : 0;
+}
+
+function startTour() {
+  tourActive = true;
+  tourStopIdx = 0;
+  // Stop any existing playback
+  if (isPlaying) togglePlay();
+  // Close inspect panel
+  document.getElementById('info-panel').classList.remove('visible');
+  selectedCell = null;
+  // Show tour UI
+  document.getElementById('tour-btn').classList.add('active');
+  document.getElementById('tour-narration').classList.add('visible');
+  // Hide controls hint during tour
+  document.getElementById('controls-hint').style.opacity = '0';
+  goToTourStop(0);
+}
+
+function exitTour() {
+  tourActive = false;
+  clearInterval(tourPlayTimer);
+  tourPlayTimer = null;
+  document.getElementById('tour-btn').classList.remove('active');
+  document.getElementById('tour-narration').classList.remove('visible');
+  document.getElementById('controls-hint').style.opacity = '1';
+  autoRotate = true;
+}
+
+function goToTourStop(idx) {
+  tourStopIdx = idx;
+  const stop = TOUR_STOPS[idx];
+  clearInterval(tourPlayTimer);
+  tourPlayTimer = null;
+
+  // Update narration panel
+  document.getElementById('tour-stop-label').textContent = `STOP ${idx + 1} — ${stop.name}`;
+  document.getElementById('tour-progress').textContent = `${idx + 1} / ${TOUR_STOPS.length}`;
+  document.getElementById('tour-title').textContent = stop.title;
+  document.getElementById('tour-text').textContent = stop.text;
+  document.getElementById('tour-signal').textContent = stop.signal;
+
+  // Update prev/next button states
+  document.getElementById('tour-prev').style.opacity = idx === 0 ? '0.3' : '1';
+  document.getElementById('tour-prev').style.pointerEvents = idx === 0 ? 'none' : 'auto';
+  document.getElementById('tour-next').textContent = idx === TOUR_STOPS.length - 1 ? 'FINISH' : 'NEXT ▶';
+
+  // Fly to position
+  flyTo(stop.lat, stop.lon, stop.zoom);
+
+  // Set timeline to start position
+  const startIdx = findTimeIndex(stop.timeLabel);
+  currentTimeIndex = startIdx;
+  document.getElementById('timeline').value = currentTimeIndex;
+  updateTimeStep();
+
+  // If stop has a play range, auto-scrub the timeline after the fly-in completes
+  if (stop.playRange) {
+    tourTimeStart = findTimeIndex(stop.playRange[0]);
+    tourTimeEnd = findTimeIndex(stop.playRange[1]);
+    const speed = stop.playSpeed || 120;
+
+    // Wait for fly-in animation to finish (1200ms) + short pause
+    setTimeout(() => {
+      if (!tourActive || tourStopIdx !== idx) return; // guard against rapid clicking
+      currentTimeIndex = tourTimeStart;
+      tourPlayTimer = setInterval(() => {
+        if (!tourActive) { clearInterval(tourPlayTimer); return; }
+        currentTimeIndex++;
+        if (currentTimeIndex > tourTimeEnd) {
+          currentTimeIndex = tourTimeStart; // loop within range
+        }
+        document.getElementById('timeline').value = currentTimeIndex;
+        updateTimeStep();
+      }, speed);
+    }, 1600);
+  }
+}
+
+function initTour() {
+  document.getElementById('tour-btn').addEventListener('click', () => {
+    if (tourActive) { exitTour(); } else { startTour(); }
+  });
+  document.getElementById('tour-exit').addEventListener('click', exitTour);
+  document.getElementById('tour-prev').addEventListener('click', () => {
+    if (tourStopIdx > 0) goToTourStop(tourStopIdx - 1);
+  });
+  document.getElementById('tour-next').addEventListener('click', () => {
+    if (tourStopIdx < TOUR_STOPS.length - 1) {
+      goToTourStop(tourStopIdx + 1);
+    } else {
+      exitTour(); // Last stop → finish
+    }
+  });
+}
+
+// ============================================================
+// 3D DATA BARS
+// ============================================================
+let gridShell = null;
+let particlesEnabled = true;
+let barMesh = null;
+let barCount = 0;
+let barDummy = new THREE.Object3D();
+let barColors = null;
+let barPrevVals, barCurrVals, barLerp = 1;
+const BAR_SCALE = 0.012; // cm TWS → world units height
+const BAR_WIDTH = 0.025;  // bar thickness
+
+function initGridDots() {
+  const ico = new THREE.IcosahedronGeometry(1.04, 4);
+  const v = ico.attributes.position;
+  const seen = new Set(), u = [];
+  for (let i = 0; i < v.count; i++) {
+    const k = `${v.getX(i).toFixed(4)}_${v.getY(i).toFixed(4)}_${v.getZ(i).toFixed(4)}`;
+    if (!seen.has(k)) { seen.add(k); u.push(v.getX(i), v.getY(i), v.getZ(i)); }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(u), 3));
+  const m = new THREE.ShaderMaterial({
+    uniforms: { uPR: { value: Math.min(window.devicePixelRatio, 2) } },
+    vertexShader: `uniform float uPR; varying float vA;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = 1.5 * uPR; gl_Position = projectionMatrix * mv;
+        vec3 n = normalize(position);
+        vec3 vd = normalize(cameraPosition - (modelMatrix * vec4(position, 1.0)).xyz);
+        vA = smoothstep(-0.1, 0.5, dot(n, vd)) * 0.35;
+      }`,
+    fragmentShader: `varying float vA;
+      void main() {
+        float d = length(gl_PointCoord - 0.5); if (d > 0.5) discard;
+        gl_FragColor = vec4(0.0, 0.96, 1.0, vA);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+  });
+  gridShell = new THREE.Points(g, m);
+  globe.add(gridShell);
+}
+
+function initParticles() {
+  initGridDots();
+
+  barCount = DATA.cells.length;
+  barPrevVals = new Float32Array(barCount);
+  barCurrVals = new Float32Array(barCount);
+
+  // Thin box: width x height x depth — height is Y, scaled per instance
+  const boxGeo = new THREE.BoxGeometry(BAR_WIDTH, 1, BAR_WIDTH);
+  // Shift origin to bottom so bar grows upward from surface
+  boxGeo.translate(0, 0.5, 0);
+
+  const barMat = new THREE.MeshPhongMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.85,
+    shininess: 60,
+    emissive: new THREE.Color(0x111111),
+  });
+
+  barMesh = new THREE.InstancedMesh(boxGeo, barMat, barCount);
+  barMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+  // Per-instance color
+  barColors = new Float32Array(barCount * 3);
+  barMesh.instanceColor = new THREE.InstancedBufferAttribute(barColors, 3);
+  barMesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+
+  // Initial placement
+  for (let i = 0; i < barCount; i++) {
+    barPrevVals[i] = DATA.cells[i].tws[0] || 0;
+    barCurrVals[i] = DATA.cells[i].tws[0] || 0;
+    barColors[i*3] = 0.15; barColors[i*3+1] = 0.15; barColors[i*3+2] = 0.2;
+  }
+
+  updateBarPositions();
+  globe.add(barMesh);
+
+  // Add a point light to make bars catch light nicely
+  const barLight = new THREE.PointLight(0xffffff, 0.4, 10);
+  barLight.position.set(2, 1, 3);
+  scene.add(barLight);
+}
+
+function updateBarPositions() {
+  if (!barMesh) return;
+
+  for (let i = 0; i < barCount; i++) {
+    const cell = DATA.cells[i];
+
+    // Hide ocean in land-only mode
+    if (landOnly && cell.land_frac === 0) {
+      barDummy.position.set(0, 0, 0);
+      barDummy.scale.set(0, 0, 0);
+      barDummy.updateMatrix();
+      barMesh.setMatrixAt(i, barDummy.matrix);
+      continue;
+    }
+
+    // Interpolated value
+    const val = barPrevVals[i] + (barCurrVals[i] - barPrevVals[i]) * barLerp;
+
+    // Position on sphere surface
+    const phi = (90 - cell.lat) * Math.PI / 180;
+    const theta = (cell.lon + 180) * Math.PI / 180;
+    const nx = -Math.sin(phi) * Math.cos(theta);
+    const ny =  Math.cos(phi);
+    const nz =  Math.sin(phi) * Math.sin(theta);
+
+    const R = 1.001;
+    barDummy.position.set(nx * R, ny * R, nz * R);
+
+    // Orient bar to point radially outward
+    barDummy.lookAt(nx * 2, ny * 2, nz * 2);
+    barDummy.rotateX(Math.PI / 2);
+
+    // Height from value — positive grows outward, negative grows inward
+    const h = val * BAR_SCALE;
+    const absH = Math.max(Math.abs(h), 0.001);
+
+    if (val >= 0) {
+      barDummy.scale.set(1, absH, 1);
+    } else {
+      // Negative: flip direction, bar grows inward
+      barDummy.scale.set(1, -absH, 1);
+    }
+
+    barDummy.updateMatrix();
+    barMesh.setMatrixAt(i, barDummy.matrix);
+
+    // Color
+    const absVal = Math.abs(val);
+    const intensity = Math.min(1, absVal / 30);
+
+    if (val > 1) {
+      // Cyan to bright blue
+      barColors[i*3]   = 0.0;
+      barColors[i*3+1] = 0.2 + intensity * 0.7;
+      barColors[i*3+2] = 0.4 + intensity * 0.6;
+    } else if (val < -1) {
+      // Orange to bright red
+      barColors[i*3]   = 0.5 + intensity * 0.5;
+      barColors[i*3+1] = 0.08 + (1 - intensity) * 0.12;
+      barColors[i*3+2] = 0.02;
+    } else {
+      // Near zero — dim gray
+      barColors[i*3]   = 0.12;
+      barColors[i*3+1] = 0.14;
+      barColors[i*3+2] = 0.18;
+    }
+  }
+
+  barMesh.instanceMatrix.needsUpdate = true;
+  barMesh.instanceColor.needsUpdate = true;
+}
+
+let cellGrid = null;
+function buildCellGrid() {
+  cellGrid = {};
+  for (let c = 0; c < DATA.cells.length; c++)
+    cellGrid[`${DATA.cells[c].lat}_${DATA.cells[c].lon}`] = c;
+}
+
+function updateCloudFromData() {
+  if (!barMesh || !DATA) return;
+  for (let i = 0; i < barCount; i++) {
+    barPrevVals[i] = barCurrVals[i];
+    barCurrVals[i] = DATA.cells[i].tws[currentTimeIndex] || 0;
+  }
+  barLerp = 0;
+}
+
+function updateParticles() {
+  if (!barMesh || !particlesEnabled) return;
+  // Smooth lerp
+  barLerp = Math.min(1, barLerp + 0.06);
+  updateBarPositions();
+}
+
+function initDustParticles() {}
+
+// ============================================================
+// ANIMATE
+// ============================================================
+function animate() {
+  requestAnimationFrame(animate);
+  if (flyAnimation) {
+    updateFlyAnimation();
+  } else if (autoRotate) {
+    globe.rotation.y += 0.0006;
+  }
+  updateRegionLabels();
+  updateParticles();
+  renderer.render(scene, camera);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+async function init() {
+  try {
+    await loadData();
+    document.getElementById('load-status').textContent = 'BUILDING GLOBE';
+    await initScene();
+    initControls();
+    initTimeline();
+    initLegend();
+    initMethodology();
+    initRegionLabels();
+    initLayerToggles();
+    initTour();
+    updateTimeStep();
+    animate();
+    setTimeout(() => document.getElementById('loading').classList.add('hidden'), 400);
+  } catch (err) {
+    document.getElementById('load-status').textContent = 'ERROR: ' + err.message;
+    document.getElementById('load-status').style.color = '#ff3131';
+    console.error(err);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
