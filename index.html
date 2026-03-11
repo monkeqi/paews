@@ -154,13 +154,6 @@ footer .right{font-family:var(--mono);font-size:.62rem;color:var(--muted)}
   </div>
 </header>
 
-<!-- ═══ LIVE ALERT ═══ -->
-<div class="alert">
-  <div class="alert-left"><div class="alert-dot"></div><div class="alert-tag">2026 S1</div></div>
-  <div><span class="alert-num">0.398</span><span class="alert-tier tier-moderate">MODERATE</span></div>
-  <div class="alert-context"><strong>El Niño Costero active.</strong> ENFEN Comunicados N°03-2026 (Feb 13) and N°04-2026 (Feb 28). Niño 1+2 +1.28°C weekly. Marine heatwave ~130K km². Two Kelvin waves March–May. IMARPE cruise 2602-04 underway. 95% CI: [0.136, 0.738].</div>
-</div>
-
 <!-- ═══ TAB NAV ═══ -->
 <nav class="tab-nav">
   <button class="tab-btn active" data-tab="background">Background</button>
@@ -170,6 +163,18 @@ footer .right{font-family:var(--mono);font-size:.62rem;color:var(--muted)}
   <button class="tab-btn" data-tab="scenarios">Scenarios</button>
   <button class="tab-btn" data-tab="limitations">Limitations</button>
 </nav>
+
+<!-- ═══ LIVE ALERT ═══ -->
+<div class="alert">
+  <div class="alert-left"><div class="alert-dot"></div><div class="alert-tag">2026 S1</div></div>
+  <div><span class="alert-num">0.398</span><span class="alert-tier tier-moderate">MODERATE</span></div>
+  <div class="alert-context">
+    <p style="margin-bottom:.6rem"><strong>What this means:</strong> Our model currently estimates a 39.8% chance that Peru's upcoming first anchovy fishing season (April–July 2026) will be disrupted — meaning it could be significantly reduced, cut short, or cancelled. This puts us in the MODERATE risk tier, where historically about 1 in 3 seasons experienced some form of disruption. It's not yet at alarm levels, but conditions are deteriorating and worth watching closely.</p>
+    <p style="margin-bottom:.6rem"><strong>Why the risk is elevated and rising:</strong> An El Niño Costero event is developing off Peru's coast. Warm water from the equatorial Pacific is pushing southward, suppressing the cold nutrient-rich upwelling that anchovy depend on for food. The Niño 1+2 index — which measures ocean warming in the waters directly off Peru — hit +1.28°C last week, well above normal. A marine heatwave now covers roughly 130,000 km² of Peru's coastal waters, and two subsurface warm waves (Kelvin waves) are forecast to arrive between March and May, which could intensify the warming right as the fishing season is supposed to begin.</p>
+    <p style="margin-bottom:.6rem"><strong>What could push this higher:</strong> The single biggest factor to watch is chlorophyll — the satellite-measured "greenness" of the ocean that tells us whether phytoplankton (anchovy food) are thriving. If the warm water suppresses upwelling enough to crash chlorophyll levels, our model jumps to ELEVATED (0.60) or even SEVERE (0.72+). In 2017, similar early-year conditions led to a severely disrupted season.</p>
+    <p style="font-size:.78rem;color:var(--muted)">ENFEN Comunicados N°03-2026 (Feb 13) &amp; N°04-2026 (Feb 28). IMARPE cruise 2602-04 underway. Bootstrap 95% CI: [0.136, 0.738].</p>
+  </div>
+</div>
 
 <!-- ═══ TAB: BACKGROUND ═══ -->
 <div class="tab-panel active" id="background">
