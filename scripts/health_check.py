@@ -112,12 +112,12 @@ print("=" * 60, flush=True)
 gt_path = DATA_EXTERNAL / "imarpe_ground_truth.csv"
 if gt_path.exists():
     gt = pd.read_csv(gt_path)
-    check("GT", "Row count", len(gt) == 30, f"{len(gt)} rows (expect 30)")
+    check("GT", "Row count", len(gt) == 30, f"{len(gt)} rows (expect 32)")
     
     # Check outcomes
     outcomes = gt['outcome'].value_counts().to_dict()
     check("GT", "NORMAL count", outcomes.get('NORMAL', 0) == 18,
-          f"NORMAL={outcomes.get('NORMAL', 0)} (expect 18)")
+          f"NORMAL={outcomes.get('NORMAL', 0)} (expect 20)")
     check("GT", "DISRUPTED count", outcomes.get('DISRUPTED', 0) == 5,
           f"DISRUPTED={outcomes.get('DISRUPTED', 0)} (expect 5)")
     check("GT", "REDUCED count", outcomes.get('REDUCED', 0) == 6,
@@ -156,7 +156,7 @@ print("=" * 60, flush=True)
 feat_path = DATA_EXTERNAL / "paews_feature_matrix.csv"
 if feat_path.exists():
     df = pd.read_csv(feat_path)
-    check("FEAT", "Row count", len(df) == 30, f"{len(df)} rows (expect 30)")
+    check("FEAT", "Row count", len(df) == 30, f"{len(df)} rows (expect 32)")
     
     # Required columns
     required_cols = ['year', 'season', 'outcome', 'target', 'sst_z', 'chl_z',

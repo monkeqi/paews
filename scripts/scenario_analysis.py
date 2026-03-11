@@ -1,4 +1,4 @@
-"""
+r"""
 scenario_analysis.py - PAEWS Scenario Sweep
 
 Sweeps Niño 1+2 and Chl Z-score combinations at fixed SST,
