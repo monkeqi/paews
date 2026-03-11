@@ -4,7 +4,7 @@ A satellite-based logistic regression model that predicts disruptions to Peru's 
 
 ## Why This Matters
 
-Peru's anchovy fishery is the world's largest single-species fishery, producing ~6 million tonnes annually and supplying ~70% of global fishmeal. Season disruptions — caused by El Niño events, stock depletion, or high juvenile incidence — can cascade through global fishmeal markets, impacting salmon farming, poultry feed, and food security.
+Peru's anchovy fishery is the world's largest single-species fishery, producing ~6 million tonnes annually and supplying ~20% of global fishmeal. Season disruptions — caused by El Niño events, stock depletion, or high juvenile incidence — can cascade through global fishmeal markets, impacting salmon farming, poultry feed, and food security.
 
 PAEWS provides advance warning of season disruptions using three remotely-sensed oceanographic features, with the goal of giving fishmeal-dependent industries 4–8 weeks of lead time before official PRODUCE/IMARPE decisions.
 
@@ -39,7 +39,7 @@ PAEWS provides advance warning of season disruptions using three remotely-sensed
 
 **Prediction: 0.398 MODERATE** (as of March 4, 2026)
 
-Context: ENFEN declared El Niño Costero alert (Comunicado N°03-2026). Niño 1+2 at +1.28°C per SIOFEN Bulletin N°09-2026. Marine heatwave active (~130,000 km²). IMARPE cruise 2602-03 underway. Two Kelvin waves forecast for March–May 2026.
+Context: ENFEN declared El Niño Costero alert (Comunicados N°03-2026 and N°04-2026). Niño 1+2 at +1.28°C per SIOFEN Bulletin N°09-2026. Marine heatwave active (~130,000 km²). IMARPE cruise 2602-04 underway. Two Kelvin waves forecast for March–May 2026.
 
 Scenario analysis shows the prediction is sensitive to chlorophyll changes: if coastal upwelling weakens (Chl drops to −0.80σ), the prediction crosses into SEVERE territory (0.718).
 
