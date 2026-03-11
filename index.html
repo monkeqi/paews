@@ -6,90 +6,404 @@
 <title>PAEWS — Peru Anchovy Early Warning System</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@300;400;500&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#f6f1eb;--card:#fffcf7;--ink:#1a1612;--body:#3d3630;--muted:#8a7e72;--rule:#d4c9ba;--rust:#b44c2a;--teal:#1a7a6d;--navy:#1e3045;--gold:#c4922a;--pale-rust:#fdf0ec;--pale-teal:#edf7f5;--serif:'Libre Baskerville',Georgia,serif;--mono:'JetBrains Mono',monospace;--sans:'Source Sans 3',system-ui,sans-serif}*{margin:0;padding:0;box-sizing:border-box}body{background:var(--bg);color:var(--body);font-family:var(--sans);font-size:17px;line-height:1.65}.wrap{max-width:960px;margin:0 auto;padding:0 2rem}header{padding:5rem 0 3rem;border-bottom:2px solid var(--ink)}.overline{font-family:var(--mono);font-size:.65rem;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:var(--rust);margin-bottom:1rem}header h1{font-family:var(--serif);font-size:clamp(2.2rem,5vw,3.4rem);font-weight:700;color:var(--ink);line-height:1.15;max-width:720px}header h1 em{font-weight:400;font-style:italic;color:var(--rust)}.intro{margin-top:1.25rem;font-size:1.1rem;color:var(--muted);max-width:580px;font-weight:300;line-height:1.7}.byline{margin-top:1.5rem;font-family:var(--mono);font-size:.75rem;color:var(--muted)}.byline a{color:var(--teal);text-decoration:none}.byline a:hover{text-decoration:underline}.alert{margin:3rem 0;background:var(--card);border:1px solid var(--rule);border-left:4px solid var(--rust);padding:1.75rem 2rem}.alert-head{display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem}.alert-dot{width:7px;height:7px;background:var(--rust);border-radius:50%;animation:blink 2s ease infinite}@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}.alert-tag{font-family:var(--mono);font-size:.65rem;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--rust)}.alert-num{font-family:var(--mono);font-size:2.8rem;font-weight:500;color:var(--ink);line-height:1}.alert-tier{display:inline-block;font-family:var(--mono);font-size:.7rem;font-weight:500;letter-spacing:.08em;padding:.25rem .6rem;margin-left:.75rem;border-radius:2px;vertical-align:middle}.tier-moderate{background:var(--pale-teal);color:var(--teal)}.tier-elevated{background:#fef3e2;color:var(--gold)}.tier-severe{background:var(--pale-rust);color:var(--rust)}.alert-body{margin-top:.75rem;font-size:.9rem;color:var(--muted);line-height:1.7}.alert-body strong{color:var(--rust);font-weight:600}section{padding:3rem 0}section+section{border-top:1px solid var(--rule)}.sec-label{font-family:var(--mono);font-size:.6rem;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem}section h2{font-family:var(--serif);font-size:1.6rem;font-weight:700;color:var(--ink);margin-bottom:1rem;line-height:1.3}section p{max-width:640px;color:var(--body)}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--rule);margin:2rem 0}.stat{padding:1.5rem 1.25rem;text-align:center;border-right:1px solid var(--rule)}.stat:last-child{border-right:none}.stat-val{font-family:var(--mono);font-size:1.8rem;font-weight:500;color:var(--ink);line-height:1}.stat-val.rust{color:var(--rust)}.stat-val.teal{color:var(--teal)}.stat-lbl{font-size:.72rem;color:var(--muted);margin-top:.4rem;line-height:1.4}.tiers{max-width:640px;margin:1.5rem 0}.tier-row{display:grid;grid-template-columns:110px 1fr 120px;padding:.85rem 0;border-bottom:1px solid var(--rule);align-items:center;font-size:.9rem}.tier-row:last-child{border-bottom:none}.tier-name{font-family:var(--mono);font-size:.75rem;font-weight:500;letter-spacing:.05em}.tier-prob{color:var(--muted)}.tier-rate{text-align:right;font-family:var(--mono);font-size:.8rem}.features{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;margin:1.5rem 0}.feat{padding:1.5rem;border:1px solid var(--rule);background:var(--card)}.feat-code{font-family:var(--mono);font-size:.85rem;font-weight:500;color:var(--teal);margin-bottom:.5rem}.feat h3{font-family:var(--serif);font-size:.95rem;font-weight:700;color:var(--ink);margin-bottom:.4rem}.feat p{font-size:.82rem;color:var(--muted);line-height:1.6}.feat-src{margin-top:.6rem;font-family:var(--mono);font-size:.6rem;color:var(--rule)}.scenarios{width:100%;max-width:640px;border-collapse:collapse;margin:1.5rem 0;font-size:.88rem}.scenarios th{font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:left;padding:.5rem .75rem;border-bottom:2px solid var(--ink)}.scenarios td{padding:.65rem .75rem;border-bottom:1px solid var(--rule)}.scenarios .num{font-family:var(--mono);font-weight:500;color:var(--ink)}.pill{font-family:var(--mono);font-size:.6rem;font-weight:500;padding:.15rem .45rem;border-radius:2px;letter-spacing:.04em}.p-sev{background:var(--pale-rust);color:var(--rust)}.p-elev{background:#fef3e2;color:var(--gold)}.p-mod{background:var(--pale-teal);color:var(--teal)}.impact-row{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--rule);margin:1.5rem 0}.impact-item{padding:1.25rem;text-align:center;border-right:1px solid var(--rule)}.impact-item:last-child{border-right:none}.impact-val{font-family:var(--serif);font-size:1.5rem;font-weight:700;color:var(--ink)}.impact-val.rust{color:var(--rust)}.impact-lbl{font-size:.7rem;color:var(--muted);margin-top:.25rem}.pipe{display:flex;align-items:center;gap:0;flex-wrap:wrap;margin:1.5rem 0}.pipe-node{border:1px solid var(--rule);padding:.75rem 1rem;text-align:center;background:var(--card)}.pipe-name{font-family:var(--mono);font-size:.7rem;font-weight:500;color:var(--teal)}.pipe-sub{font-size:.65rem;color:var(--muted)}.pipe-arr{padding:0 .35rem;color:var(--rule);font-size:1rem}footer{padding:2.5rem 0;border-top:2px solid var(--ink);display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem}footer .left{font-size:.85rem;color:var(--body)}footer a{color:var(--teal);text-decoration:none}footer a:hover{text-decoration:underline}footer .right{font-family:var(--mono);font-size:.65rem;color:var(--muted)}@media(max-width:700px){.stats,.impact-row{grid-template-columns:repeat(2,1fr)}.stats .stat:nth-child(2){border-right:none}.stats .stat:nth-child(1),.stats .stat:nth-child(2){border-bottom:1px solid var(--rule)}.features{grid-template-columns:1fr}.pipe{flex-direction:column;align-items:flex-start}.pipe-arr{transform:rotate(90deg);padding:.25rem 0}}
+:root{--bg:#f6f1eb;--card:#fffcf7;--ink:#1a1612;--body:#3d3630;--muted:#8a7e72;--rule:#d4c9ba;--rust:#b44c2a;--teal:#1a7a6d;--navy:#1e3045;--gold:#c4922a;--pale-rust:#fdf0ec;--pale-teal:#edf7f5;--serif:'Libre Baskerville',Georgia,serif;--mono:'JetBrains Mono',monospace;--sans:'Source Sans 3',system-ui,sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--body);font-family:var(--sans);font-size:17px;line-height:1.65}
+.wrap{max-width:960px;margin:0 auto;padding:0 2rem}
+
+/* HEADER */
+header{padding:3.5rem 0 2rem;border-bottom:2px solid var(--ink)}
+.overline{font-family:var(--mono);font-size:.65rem;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:var(--rust);margin-bottom:.75rem}
+header h1{font-family:var(--serif);font-size:clamp(1.8rem,4vw,2.8rem);font-weight:700;color:var(--ink);line-height:1.15;max-width:720px}
+header h1 em{font-weight:400;font-style:italic;color:var(--rust)}
+.header-row{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem;margin-top:1rem}
+.intro{font-size:.95rem;color:var(--muted);max-width:520px;font-weight:300;line-height:1.6}
+.byline{font-family:var(--mono);font-size:.72rem;color:var(--muted);text-align:right}
+.byline a{color:var(--teal);text-decoration:none}
+.byline a:hover{text-decoration:underline}
+
+/* LIVE ALERT - compact */
+.alert{margin:1.5rem 0;background:var(--card);border:1px solid var(--rule);border-left:4px solid var(--rust);padding:1.25rem 1.5rem;display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap}
+.alert-left{display:flex;align-items:center;gap:.6rem}
+.alert-dot{width:7px;height:7px;background:var(--rust);border-radius:50%;animation:blink 2s ease infinite;flex-shrink:0}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.alert-tag{font-family:var(--mono);font-size:.6rem;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--rust);white-space:nowrap}
+.alert-num{font-family:var(--mono);font-size:2.2rem;font-weight:500;color:var(--ink);line-height:1}
+.alert-tier{display:inline-block;font-family:var(--mono);font-size:.65rem;font-weight:500;letter-spacing:.08em;padding:.2rem .5rem;margin-left:.5rem;border-radius:2px;vertical-align:middle}
+.tier-moderate{background:var(--pale-teal);color:var(--teal)}
+.alert-context{font-size:.8rem;color:var(--muted);line-height:1.6;flex:1;min-width:280px}
+.alert-context strong{color:var(--rust);font-weight:600}
+
+/* TAB NAV */
+.tab-nav{display:flex;gap:0;border-bottom:2px solid var(--ink);margin-top:.5rem;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tab-btn{font-family:var(--mono);font-size:.68rem;font-weight:500;letter-spacing:.06em;padding:.75rem 1.25rem;background:none;border:none;color:var(--muted);cursor:pointer;white-space:nowrap;position:relative;transition:color .2s}
+.tab-btn:hover{color:var(--ink)}
+.tab-btn.active{color:var(--ink)}
+.tab-btn.active::after{content:'';position:absolute;bottom:-2px;left:0;right:0;height:2px;background:var(--rust)}
+
+/* TAB CONTENT */
+.tab-panel{display:none;padding:2.5rem 0 3rem;animation:fadeIn .3s ease}
+.tab-panel.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* SECTION STYLES */
+.sec-label{font-family:var(--mono);font-size:.6rem;font-weight:500;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem}
+.tab-panel h2{font-family:var(--serif);font-size:1.5rem;font-weight:700;color:var(--ink);margin-bottom:1rem;line-height:1.3}
+.tab-panel h3{font-family:var(--serif);font-size:1.1rem;font-weight:700;color:var(--ink);margin:2rem 0 .75rem;line-height:1.3}
+.tab-panel p{max-width:640px;color:var(--body);margin-bottom:.75rem}
+.tab-panel p:last-child{margin-bottom:0}
+
+/* STATS */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--rule);margin:1.5rem 0}
+.stat{padding:1.25rem 1rem;text-align:center;border-right:1px solid var(--rule)}
+.stat:last-child{border-right:none}
+.stat-val{font-family:var(--mono);font-size:1.6rem;font-weight:500;color:var(--ink);line-height:1}
+.stat-val.rust{color:var(--rust)}.stat-val.teal{color:var(--teal)}
+.stat-lbl{font-size:.68rem;color:var(--muted);margin-top:.35rem;line-height:1.4}
+
+/* TIERS */
+.tiers{max-width:640px;margin:1.5rem 0}
+.tier-row{display:grid;grid-template-columns:110px 1fr 120px;padding:.75rem 0;border-bottom:1px solid var(--rule);align-items:center;font-size:.88rem}
+.tier-row:last-child{border-bottom:none}
+.tier-name{font-family:var(--mono);font-size:.72rem;font-weight:500;letter-spacing:.05em}
+.tier-prob{color:var(--muted)}.tier-rate{text-align:right;font-family:var(--mono);font-size:.78rem}
+
+/* FEATURES */
+.features{display:grid;grid-template-columns:repeat(3,1fr);gap:1.25rem;margin:1.5rem 0}
+.feat{padding:1.25rem;border:1px solid var(--rule);background:var(--card)}
+.feat-code{font-family:var(--mono);font-size:.82rem;font-weight:500;color:var(--teal);margin-bottom:.4rem}
+.feat h3{font-family:var(--serif);font-size:.9rem;font-weight:700;color:var(--ink);margin-bottom:.35rem}
+.feat p{font-size:.8rem;color:var(--muted);line-height:1.6;margin-bottom:.3rem}
+.feat-src{margin-top:.5rem;font-family:var(--mono);font-size:.58rem;color:var(--rule)}
+
+/* SOURCE CARDS */
+.source-cards{display:grid;grid-template-columns:1fr;gap:1.25rem;margin:1.5rem 0}
+.src-card{background:var(--card);border:1px solid var(--rule);padding:1.5rem 1.75rem}
+.src-card-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.6rem;flex-wrap:wrap;gap:.5rem}
+.src-card-name{font-family:var(--mono);font-size:.8rem;font-weight:500;color:var(--teal)}
+.src-card-badge{font-family:var(--mono);font-size:.55rem;font-weight:500;letter-spacing:.08em;padding:.15rem .4rem;border-radius:2px;background:var(--pale-teal);color:var(--teal)}
+.src-card p{font-size:.85rem;color:var(--body);line-height:1.7;margin-bottom:.4rem}
+.detail-grid{display:grid;grid-template-columns:110px 1fr;gap:.2rem .6rem;margin-top:.6rem;font-size:.78rem}
+.detail-grid dt{font-family:var(--mono);font-size:.65rem;color:var(--muted);padding-top:.1rem}
+.detail-grid dd{color:var(--body)}
+.src-card a{color:var(--teal);font-size:.78rem;word-break:break-all}
+
+/* SCENARIOS */
+.scenarios{width:100%;max-width:640px;border-collapse:collapse;margin:1.5rem 0;font-size:.85rem}
+.scenarios th{font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:left;padding:.45rem .65rem;border-bottom:2px solid var(--ink)}
+.scenarios td{padding:.55rem .65rem;border-bottom:1px solid var(--rule)}
+.scenarios .num{font-family:var(--mono);font-weight:500;color:var(--ink)}
+.pill{font-family:var(--mono);font-size:.58rem;font-weight:500;padding:.12rem .4rem;border-radius:2px;letter-spacing:.04em}
+.p-sev{background:var(--pale-rust);color:var(--rust)}.p-elev{background:#fef3e2;color:var(--gold)}.p-mod{background:var(--pale-teal);color:var(--teal)}
+
+/* IMPACT */
+.impact-row{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--rule);margin:1.5rem 0}
+.impact-item{padding:1.1rem;text-align:center;border-right:1px solid var(--rule)}
+.impact-item:last-child{border-right:none}
+.impact-val{font-family:var(--serif);font-size:1.4rem;font-weight:700;color:var(--ink)}
+.impact-val.rust{color:var(--rust)}
+.impact-lbl{font-size:.68rem;color:var(--muted);margin-top:.2rem}
+
+/* PIPELINE */
+.pipe{display:flex;align-items:center;gap:0;flex-wrap:wrap;margin:1.5rem 0}
+.pipe-node{border:1px solid var(--rule);padding:.65rem .9rem;text-align:center;background:var(--card)}
+.pipe-name{font-family:var(--mono);font-size:.68rem;font-weight:500;color:var(--teal)}
+.pipe-sub{font-size:.6rem;color:var(--muted)}
+.pipe-arr{padding:0 .3rem;color:var(--rule);font-size:.9rem}
+
+/* METHOD BOX */
+.method-box{background:var(--card);border:1px solid var(--rule);padding:1.5rem 1.75rem;margin:1.25rem 0}
+.method-box p{font-size:.85rem;line-height:1.7}
+.coef-table{width:100%;max-width:400px;border-collapse:collapse;margin:.75rem 0;font-size:.82rem}
+.coef-table th{font-family:var(--mono);font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:.35rem .5rem;border-bottom:2px solid var(--ink)}
+.coef-table td{padding:.4rem .5rem;border-bottom:1px solid var(--rule);font-family:var(--mono);font-size:.8rem}
+.coef-table td:nth-child(2){text-align:right}
+
+/* FOOTER */
+footer{padding:2rem 0;border-top:2px solid var(--ink);display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem}
+footer .left{font-size:.82rem;color:var(--body)}
+footer a{color:var(--teal);text-decoration:none}
+footer a:hover{text-decoration:underline}
+footer .right{font-family:var(--mono);font-size:.62rem;color:var(--muted)}
+
+@media(max-width:700px){
+  .stats,.impact-row{grid-template-columns:repeat(2,1fr)}
+  .stats .stat:nth-child(2){border-right:none}
+  .stats .stat:nth-child(1),.stats .stat:nth-child(2){border-bottom:1px solid var(--rule)}
+  .features{grid-template-columns:1fr}
+  .pipe{flex-direction:column;align-items:flex-start}
+  .pipe-arr{transform:rotate(90deg);padding:.2rem 0}
+  .detail-grid{grid-template-columns:1fr}
+  .alert{flex-direction:column;align-items:flex-start}
+  .tab-btn{padding:.6rem .8rem;font-size:.6rem}
+  .header-row{flex-direction:column;align-items:flex-start}
+  .byline{text-align:left}
+}
 </style>
 </head>
 <body>
 <div class="wrap">
+
+<!-- ═══ HEADER ═══ -->
 <header>
-<div class="overline">Satellite Fisheries Intelligence</div>
-<h1>Peru Anchovy <em>Early Warning</em> System</h1>
-<p class="intro">Predicting disruptions to the world's largest single-species fishery using three remotely-sensed oceanographic features. Open source, open data, no proprietary inputs.</p>
-<div class="byline">Joseph Bell · <a href="https://github.com/monkeqi/paews">github.com/monkeqi/paews</a></div>
+  <div class="overline">Satellite Fisheries Intelligence</div>
+  <h1>Peru Anchovy <em>Early Warning</em> System</h1>
+  <div class="header-row">
+    <p class="intro">Predicting disruptions to the world's largest single-species fishery using three remotely-sensed oceanographic features. Open source, open data, no proprietary inputs.</p>
+    <div class="byline">Joseph Bell<br><a href="https://github.com/monkeqi/paews">github.com/monkeqi/paews</a></div>
+  </div>
 </header>
+
+<!-- ═══ LIVE ALERT ═══ -->
 <div class="alert">
-<div class="alert-head"><div class="alert-dot"></div><div class="alert-tag">Live Prediction — 2026 Season 1</div></div>
-<div><span class="alert-num">0.398</span><span class="alert-tier tier-moderate">MODERATE</span></div>
-<div class="alert-body"><strong>El Niño Costero active.</strong> ENFEN Comunicado N°03-2026. Niño&nbsp;1+2 at +1.28°C (weekly). Marine heatwave ~130,000&nbsp;km². Two Kelvin waves forecast March–May. IMARPE pre-season cruise underway.</div>
+  <div class="alert-left"><div class="alert-dot"></div><div class="alert-tag">2026 S1</div></div>
+  <div><span class="alert-num">0.398</span><span class="alert-tier tier-moderate">MODERATE</span></div>
+  <div class="alert-context"><strong>El Niño Costero active.</strong> Niño 1+2 +1.28°C weekly. Marine heatwave ~130K km². Two Kelvin waves March–May. IMARPE cruise 2602-03 underway. 95% CI: [0.136, 0.738].</div>
 </div>
-<section>
-<div class="sec-label">Model</div>
-<h2>Validated on 32 seasons across 16 years of ENSO variability</h2>
-<div class="stats">
-<div class="stat"><div class="stat-val">32</div><div class="stat-lbl">Seasons trained<br>2010–2025</div></div>
-<div class="stat"><div class="stat-val teal">100%</div><div class="stat-lbl">SEVERE detection<br>4 of 4</div></div>
-<div class="stat"><div class="stat-val">0.629</div><div class="stat-lbl">ROC-AUC<br>Leave-one-out CV</div></div>
-<div class="stat"><div class="stat-val rust">0</div><div class="stat-lbl">False alarms<br>at SEVERE tier</div></div>
+
+<!-- ═══ TAB NAV ═══ -->
+<nav class="tab-nav">
+  <button class="tab-btn active" data-tab="background">Background</button>
+  <button class="tab-btn" data-tab="model">Model</button>
+  <button class="tab-btn" data-tab="data">Data Sources</button>
+  <button class="tab-btn" data-tab="pipeline">Pipeline</button>
+  <button class="tab-btn" data-tab="scenarios">Scenarios</button>
+  <button class="tab-btn" data-tab="limitations">Limitations</button>
+</nav>
+
+<!-- ═══ TAB: BACKGROUND ═══ -->
+<div class="tab-panel active" id="background">
+  <div class="sec-label">Background</div>
+  <h2>The anchovy that feeds the world</h2>
+  <p>Peru's anchovy (<em>Engraulis ringens</em>) fishery operates in the Humboldt Current upwelling system — one of the most productive marine ecosystems on Earth. Cold, nutrient-rich water rises from the deep ocean along the coast, fueling massive phytoplankton blooms that sustain enormous anchovy populations.</p>
+  <p>Peru manages its anchovy fishery in two seasons per year: a first season (S1, typically April–July) and a second season (S2, typically November–January), each in two zones — north-center and south. Before each season opens, IMARPE (Instituto del Mar del Perú) conducts a hydroacoustic evaluation cruise to estimate biomass, size structure, and reproductive condition. PRODUCE (Ministerio de la Producción) then sets the total allowable catch.</p>
+  <p>When ocean conditions shift — El Niño events warm the surface, suppress upwelling, and reduce food supply — the anchovy stock can collapse or become dominated by juveniles too small to harvest. Seasons get reduced, delayed, or cancelled entirely. The 2023 first season was cancelled outright due to 86% juvenile incidence, the first full cancellation in Peru's fishing history.</p>
+
+  <div class="impact-row">
+    <div class="impact-item"><div class="impact-val">~6M t</div><div class="impact-lbl">Annual catch<br>World's largest fishery</div></div>
+    <div class="impact-item"><div class="impact-val">70%</div><div class="impact-lbl">Global fishmeal<br>from Peru</div></div>
+    <div class="impact-item"><div class="impact-val rust">$1.4B</div><div class="impact-lbl">Impact estimate<br>2023 cancellation</div></div>
+    <div class="impact-item"><div class="impact-val">4–8 wk</div><div class="impact-lbl">Lead time target<br>Before official decision</div></div>
+  </div>
+
+  <p style="color:var(--muted);font-size:.9rem;line-height:1.75">Norwegian salmon farms, poultry operations, and aquaculture worldwide depend on Peruvian fishmeal. Season disruptions trigger fishmeal price spikes of 30–60%. PAEWS gives supply chain managers early visibility into disruption risk — weeks before official government decisions.</p>
 </div>
-<div class="sec-label" style="margin-top:2rem">Risk Tiers</div>
-<div class="tiers">
-<div class="tier-row"><div class="tier-name" style="color:var(--rust)">SEVERE</div><div class="tier-prob">≥ 0.70</div><div class="tier-rate" style="color:var(--rust)">100% disrupted</div></div>
-<div class="tier-row"><div class="tier-name" style="color:var(--gold)">ELEVATED</div><div class="tier-prob">0.50 – 0.69</div><div class="tier-rate" style="color:var(--gold)">25% disrupted</div></div>
-<div class="tier-row"><div class="tier-name" style="color:var(--teal)">MODERATE</div><div class="tier-prob">0.20 – 0.49</div><div class="tier-rate" style="color:var(--teal)">~30% disrupted</div></div>
-<div class="tier-row"><div class="tier-name" style="color:var(--navy)">LOW</div><div class="tier-prob">&lt; 0.20</div><div class="tier-rate" style="color:var(--navy)">40% disrupted</div></div>
+
+<!-- ═══ TAB: MODEL ═══ -->
+<div class="tab-panel" id="model">
+  <div class="sec-label">Model</div>
+  <h2>Validated on 32 seasons across 16 years of ENSO variability</h2>
+  <p>PAEWS uses a logistic regression classifier trained on 32 anchovy seasons from 2010 to 2025. Each season is labeled Normal or Disrupted (combining Reduced, Disrupted, and Cancelled outcomes). Of 32 seasons, 12 were disrupted — a 37.5% base rate reflecting the real volatility of this fishery.</p>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-val">32</div><div class="stat-lbl">Seasons trained<br>2010 S1 – 2025 S2</div></div>
+    <div class="stat"><div class="stat-val teal">100%</div><div class="stat-lbl">SEVERE detection<br>4 of 4</div></div>
+    <div class="stat"><div class="stat-val">0.629</div><div class="stat-lbl">ROC-AUC<br>Leave-one-out CV</div></div>
+    <div class="stat"><div class="stat-val rust">0</div><div class="stat-lbl">False alarms<br>at SEVERE tier</div></div>
+  </div>
+
+  <h3>Validation approach</h3>
+  <p>With only 32 samples, standard train/test splits would be unreliable. Instead, the model uses Leave-One-Out Cross-Validation (LOO-CV): for each season, the model is retrained on the other 31 seasons and predicts the held-out one. This provides 32 independent out-of-sample predictions. The ROC-AUC of 0.629 reflects genuine predictive skill, not overfitting. The StandardScaler is applied within each LOO fold to prevent data leakage.</p>
+
+  <h3>Risk tiers</h3>
+  <p>Rather than a binary disrupted/normal call, PAEWS maps the continuous probability to four risk tiers calibrated against historical outcomes:</p>
+  <div class="tiers">
+    <div class="tier-row"><div class="tier-name" style="color:var(--rust)">SEVERE</div><div class="tier-prob">≥ 0.70</div><div class="tier-rate" style="color:var(--rust)">100% disrupted</div></div>
+    <div class="tier-row"><div class="tier-name" style="color:var(--gold)">ELEVATED</div><div class="tier-prob">0.50 – 0.69</div><div class="tier-rate" style="color:var(--gold)">25% disrupted</div></div>
+    <div class="tier-row"><div class="tier-name" style="color:var(--teal)">MODERATE</div><div class="tier-prob">0.20 – 0.49</div><div class="tier-rate" style="color:var(--teal)">~30% disrupted</div></div>
+    <div class="tier-row"><div class="tier-name" style="color:var(--navy)">LOW</div><div class="tier-prob">&lt; 0.20</div><div class="tier-rate" style="color:var(--navy)">40% disrupted</div></div>
+  </div>
+  <p style="font-size:.85rem;color:var(--muted)">The SEVERE tier is the most actionable: every season that scored ≥ 0.70 was disrupted, with zero false positives. The middle tiers have overlapping disruption rates — an honest reflection of what three satellite features can resolve with 32 training samples.</p>
+
+  <h3>Model coefficients</h3>
+  <div class="method-box">
+    <p>Positive coefficients increase disruption probability; negative coefficients decrease it.</p>
+    <table class="coef-table">
+      <thead><tr><th>Feature</th><th>Coefficient</th></tr></thead>
+      <tbody>
+        <tr><td>sst_z</td><td>+0.390</td></tr>
+        <tr><td>chl_z</td><td>−0.583</td></tr>
+        <tr><td>nino12_t1</td><td>+0.363</td></tr>
+        <tr><td>intercept</td><td>−0.589</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:.82rem;color:var(--muted)">Warmer SST and higher Niño 1+2 increase risk (positive). Higher chlorophyll decreases risk (negative) — healthy upwelling means productive ocean and well-fed stock. The negative intercept reflects the slight majority of normal seasons in the training data.</p>
+  </div>
 </div>
-</section>
-<section>
-<div class="sec-label">Input Features</div>
-<h2>Three signals, all free, all automated</h2>
-<div class="features">
-<div class="feat"><div class="feat-code">sst_z</div><h3>Sea Surface Temperature</h3><p>Z-score anomaly for Peru coastal box. Warmer surface = higher risk. Captures El Niño heating.</p><div class="feat-src">NOAA OISST → ERDDAP</div></div>
-<div class="feat"><div class="feat-code">chl_z</div><h3>Chlorophyll-a</h3><p>Z-score from Copernicus NRT with coastal mask. Lower chlorophyll = weaker upwelling = higher risk.</p><div class="feat-src">Copernicus Marine → OPeNDAP</div></div>
-<div class="feat"><div class="feat-code">nino12_t1</div><h3>Niño 1+2 Index</h3><p>Monthly eastern equatorial Pacific anomaly, lagged one month. The large-scale climate driver.</p><div class="feat-src">NOAA CPC → CSV</div></div>
+
+<!-- ═══ TAB: DATA SOURCES ═══ -->
+<div class="tab-panel" id="data">
+  <div class="sec-label">Input Features</div>
+  <h2>Three signals, all free, all automated</h2>
+  <p>Every feature comes from a publicly operated satellite mission or government climate monitoring program. No proprietary data, no paid subscriptions, no manual data entry.</p>
+
+  <div class="features">
+    <div class="feat"><div class="feat-code">sst_z</div><h3>Sea Surface Temperature</h3><p>Z-score anomaly for Peru coastal box. Warmer surface = higher risk.</p><div class="feat-src">NOAA OISST → ERDDAP</div></div>
+    <div class="feat"><div class="feat-code">chl_z</div><h3>Chlorophyll-a</h3><p>Z-score from Copernicus NRT with coastal mask. Lower Chl = weaker upwelling = higher risk.</p><div class="feat-src">Copernicus Marine → OPeNDAP</div></div>
+    <div class="feat"><div class="feat-code">nino12_t1</div><h3>Niño 1+2 Index</h3><p>Monthly eastern equatorial Pacific anomaly, lagged one month.</p><div class="feat-src">NOAA CPC → CSV</div></div>
+  </div>
+
+  <h3>Detailed source documentation</h3>
+
+  <div class="source-cards">
+    <div class="src-card">
+      <div class="src-card-head">
+        <div class="src-card-name">NOAA OISST v2.1</div>
+        <div class="src-card-badge">FREE · DAILY · 0.25°</div>
+      </div>
+      <p>The Optimum Interpolation Sea Surface Temperature dataset blends satellite observations (AVHRR sensors on NOAA polar-orbiting satellites), ship reports, and buoy data into a global daily gridded product. PAEWS queries through NOAA's ERDDAP server, extracting monthly mean SST for the Peru coastal box (0–16°S, 85–70°W) and computing z-score anomalies against the seasonal climatology.</p>
+      <dl class="detail-grid">
+        <dt>Dataset</dt><dd>ncdcOisst21Agg_LonPM180</dd>
+        <dt>Spatial res.</dt><dd>0.25° × 0.25° (~25 km)</dd>
+        <dt>Temporal</dt><dd>Daily, from 1981-09-01 to present</dd>
+        <dt>Access</dt><dd>ERDDAP OPeNDAP (no registration)</dd>
+        <dt>Peru box</dt><dd>0–16°S, 85–70°W (v2)</dd>
+      </dl>
+      <p style="margin-top:.4rem"><a href="https://coastwatch.pfeg.noaa.gov/erddap/griddap/ncdcOisst21Agg_LonPM180.html">coastwatch.pfeg.noaa.gov/erddap</a></p>
+    </div>
+
+    <div class="src-card">
+      <div class="src-card-head">
+        <div class="src-card-name">Copernicus Marine NRT Chlorophyll-a</div>
+        <div class="src-card-badge">FREE · DAILY · 4 km</div>
+      </div>
+      <p>Ocean-color satellite chlorophyll-a from the Copernicus Marine Service Near-Real-Time product, derived from the OLCI sensor on Sentinel-3 and merged multi-sensor L4 products. Chlorophyll concentration is a proxy for phytoplankton biomass — the base of the food web that sustains anchovy.</p>
+      <p>PAEWS applies a coastal productivity mask (top 50% most productive pixels) to avoid dilution by offshore oligotrophic waters. This mask was critical: without it, Copernicus's gap-filling in low-productivity offshore areas destroyed the feature's predictive power. The migration from MODIS Aqua (decommissioning August 2026) to Copernicus was completed during model development.</p>
+      <dl class="detail-grid">
+        <dt>Product</dt><dd>OCEANCOLOUR_GLO_BGC_L4_NRT_009_032</dd>
+        <dt>Spatial res.</dt><dd>~4 km</dd>
+        <dt>Temporal</dt><dd>Daily, ~1 month latency for gap-free L4</dd>
+        <dt>Access</dt><dd>OPeNDAP (free registration)</dd>
+        <dt>Mask</dt><dd>Coastal productivity mask (top 50%)</dd>
+      </dl>
+      <p style="margin-top:.4rem"><a href="https://data.marine.copernicus.eu/products">data.marine.copernicus.eu</a></p>
+    </div>
+
+    <div class="src-card">
+      <div class="src-card-head">
+        <div class="src-card-name">NOAA CPC Niño 1+2 Index</div>
+        <div class="src-card-badge">FREE · MONTHLY</div>
+      </div>
+      <p>The Niño 1+2 index is the average SST anomaly in the easternmost ENSO monitoring region (0–10°S, 90–80°W) — directly adjacent to the Peru coast. Unlike the more commonly cited Niño 3.4 (central Pacific), Niño 1+2 captures the eastern Pacific warming that directly impacts Peru's upwelling.</p>
+      <p>PAEWS uses this value lagged by one month (t−1), meaning the February Niño 1+2 value is used to predict the April–July S1 season. This provides genuine lead time: by prediction time, the value is already published and fixed. No forecasting of the index is needed.</p>
+      <dl class="detail-grid">
+        <dt>Region</dt><dd>0–10°S, 90–80°W</dd>
+        <dt>Base period</dt><dd>ERSSTv5, 1991–2020 climatology</dd>
+        <dt>Update</dt><dd>~10th of each month</dd>
+        <dt>Unit</dt><dd>°C anomaly</dd>
+        <dt>Lag</dt><dd>t−1 month</dd>
+      </dl>
+      <p style="margin-top:.4rem"><a href="https://www.cpc.ncep.noaa.gov/data/indices/">cpc.ncep.noaa.gov/data/indices</a></p>
+    </div>
+
+    <div class="src-card">
+      <div class="src-card-head">
+        <div class="src-card-name">IMARPE / PRODUCE Ground Truth</div>
+        <div class="src-card-badge">MANUAL · PER SEASON</div>
+      </div>
+      <p>The outcome label for each season (Normal, Reduced, Disrupted, or Cancelled) comes from cross-referencing official sources: PRODUCE Resoluciones Ministeriales published in El Peruano (official gazette), IMARPE reports, and verified news coverage. A season is labeled "Disrupted" if it was cancelled, ended early with significant quota remaining, or had a quota cut of more than 50%.</p>
+      <p>All 32 outcome labels were manually verified against primary sources. No AI-generated or AI-extracted data values are used in the training set. An earlier model version accidentally included LLM-hallucinated biomass values — these were caught and removed during a data integrity audit.</p>
+    </div>
+  </div>
 </div>
-</section>
-<section>
-<div class="sec-label">Scenario Analysis — 2026 S1</div>
-<h2>How the prediction shifts</h2>
-<table class="scenarios">
-<thead><tr><th>Scenario</th><th>Prob.</th><th>Tier</th></tr></thead>
-<tbody>
-<tr><td>Current (Feb Niño +0.92, Dec Chl proxy)</td><td class="num">0.398</td><td><span class="pill p-mod">MODERATE</span></td></tr>
-<tr><td>If Chl drops to −0.40σ</td><td class="num">0.596</td><td><span class="pill p-elev">ELEVATED</span></td></tr>
-<tr><td>If Chl drops to −0.80σ</td><td class="num">0.718</td><td><span class="pill p-sev">SEVERE</span></td></tr>
-<tr><td>Niño +1.50, Chl −0.40σ</td><td class="num">0.665</td><td><span class="pill p-elev">ELEVATED</span></td></tr>
-<tr><td>Niño +1.50, Chl −0.80σ</td><td class="num">0.788</td><td><span class="pill p-sev">SEVERE</span></td></tr>
-<tr><td>Worst case (2017-like)</td><td class="num">0.807</td><td><span class="pill p-sev">SEVERE</span></td></tr>
-</tbody>
-</table>
-</section>
-<section>
-<div class="sec-label">Why It Matters</div>
-<h2>When Peru's anchovy fishery breaks, global supply chains feel it</h2>
-<div class="impact-row">
-<div class="impact-item"><div class="impact-val">~6M t</div><div class="impact-lbl">Annual catch<br>World's largest fishery</div></div>
-<div class="impact-item"><div class="impact-val">70%</div><div class="impact-lbl">Global fishmeal<br>from Peru</div></div>
-<div class="impact-item"><div class="impact-val rust">$1.4B</div><div class="impact-lbl">Impact estimate<br>2023 cancellation</div></div>
-<div class="impact-item"><div class="impact-val">4–8 wk</div><div class="impact-lbl">Lead time target<br>Before official decision</div></div>
+
+<!-- ═══ TAB: PIPELINE ═══ -->
+<div class="tab-panel" id="pipeline">
+  <div class="sec-label">Data Pipeline</div>
+  <h2>Satellite to prediction, fully automated</h2>
+  <p>The prediction pipeline downloads data from three public sources, computes z-score anomalies, and passes them through the logistic regression model. The entire flow runs in Python (conda environment: <code style="font-family:var(--mono);font-size:.85rem;color:var(--teal)">geosentinel</code>) on a local workstation.</p>
+
+  <div class="pipe">
+    <div class="pipe-node"><div class="pipe-name">NOAA OISST</div><div class="pipe-sub">Daily SST grids</div></div><span class="pipe-arr">→</span>
+    <div class="pipe-node"><div class="pipe-name">Copernicus NRT</div><div class="pipe-sub">Chl-a L4</div></div><span class="pipe-arr">→</span>
+    <div class="pipe-node"><div class="pipe-name">CPC Indices</div><div class="pipe-sub">Niño 1+2 monthly</div></div><span class="pipe-arr">→</span>
+    <div class="pipe-node" style="border-color:var(--teal)"><div class="pipe-name">PAEWS</div><div class="pipe-sub">Logistic regression</div></div><span class="pipe-arr">→</span>
+    <div class="pipe-node"><div class="pipe-name">Risk Tier</div><div class="pipe-sub">SEVERE → LOW</div></div>
+  </div>
+
+  <h3>Processing steps</h3>
+  <p><strong>SST:</strong> <code style="font-family:var(--mono);font-size:.85rem">data_pipeline.py</code> queries ERDDAP for the Peru coastal box, computes monthly means from daily grids, and calculates z-score anomalies against the full 1981–present climatology for the relevant month.</p>
+  <p><strong>Chlorophyll:</strong> <code style="font-family:var(--mono);font-size:.85rem">chl_migration.py</code> downloads Copernicus NRT data, applies the coastal productivity mask (pre-computed from the long-term mean chlorophyll field), and computes z-score anomalies. The mask retains only the top 50% most productive pixels in the Peru box to preserve the coastal upwelling signal.</p>
+  <p><strong>Niño 1+2:</strong> <code style="font-family:var(--mono);font-size:.85rem">external_data_puller.py</code> downloads the CPC monthly ERSSTv5 ASCII file and extracts the Niño 1+2 ANOM column. The value is lagged by one month — for a first season prediction, the February value is used.</p>
+  <p><strong>Prediction:</strong> <code style="font-family:var(--mono);font-size:.85rem">predict_2026_s1.py</code> loads the feature matrix, fits the logistic regression on all 32 seasons with balanced class weights, and outputs the disruption probability with bootstrap confidence intervals (500 resamples) and tier classification.</p>
+
+  <p style="color:var(--muted);font-size:.85rem;margin-top:1rem">No proprietary data. No paid APIs. Every input comes from government-operated satellite missions and public climate monitoring programs.</p>
 </div>
-<p style="color:var(--muted);font-size:.92rem;margin-top:1rem;line-height:1.75">Norwegian salmon farms, poultry operations, and aquaculture worldwide depend on Peruvian fishmeal. Season disruptions trigger price spikes of 30–60%. PAEWS gives supply chain managers early visibility into disruption risk — weeks before official government decisions.</p>
-</section>
-<section>
-<div class="sec-label">Data Pipeline</div>
-<h2>Satellite to prediction, fully automated</h2>
-<div class="pipe">
-<div class="pipe-node"><div class="pipe-name">NOAA OISST</div><div class="pipe-sub">Daily SST</div></div><span class="pipe-arr">→</span>
-<div class="pipe-node"><div class="pipe-name">Copernicus NRT</div><div class="pipe-sub">Chl-a</div></div><span class="pipe-arr">→</span>
-<div class="pipe-node"><div class="pipe-name">CPC Indices</div><div class="pipe-sub">Niño 1+2</div></div><span class="pipe-arr">→</span>
-<div class="pipe-node" style="border-color:var(--teal)"><div class="pipe-name">PAEWS</div><div class="pipe-sub">Logistic regression</div></div><span class="pipe-arr">→</span>
-<div class="pipe-node"><div class="pipe-name">Risk Tier</div><div class="pipe-sub">SEVERE → LOW</div></div>
+
+<!-- ═══ TAB: SCENARIOS ═══ -->
+<div class="tab-panel" id="scenarios">
+  <div class="sec-label">Scenario Analysis — 2026 S1</div>
+  <h2>How the prediction shifts under different conditions</h2>
+  <p>Because the model has only three inputs, scenario analysis is straightforward. We sweep across plausible ranges for Niño 1+2 and chlorophyll to see where the prediction crosses tier boundaries. The current prediction (0.398, MODERATE) sits in a sensitive zone — a meaningful drop in chlorophyll alone pushes it to ELEVATED or SEVERE.</p>
+
+  <table class="scenarios">
+    <thead><tr><th>Scenario</th><th>Prob.</th><th>Tier</th></tr></thead>
+    <tbody>
+      <tr><td>Current (Feb Niño +0.92, Dec Chl proxy)</td><td class="num">0.398</td><td><span class="pill p-mod">MODERATE</span></td></tr>
+      <tr><td>If coastal chlorophyll drops to −0.40σ</td><td class="num">0.596</td><td><span class="pill p-elev">ELEVATED</span></td></tr>
+      <tr><td>If coastal chlorophyll drops to −0.80σ</td><td class="num">0.718</td><td><span class="pill p-sev">SEVERE</span></td></tr>
+      <tr><td>Niño +1.50, Chl −0.40σ</td><td class="num">0.665</td><td><span class="pill p-elev">ELEVATED</span></td></tr>
+      <tr><td>Niño +1.50, Chl −0.80σ</td><td class="num">0.788</td><td><span class="pill p-sev">SEVERE</span></td></tr>
+      <tr><td>Worst case (2017-like conditions)</td><td class="num">0.807</td><td><span class="pill p-sev">SEVERE</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Current ENFEN context</h3>
+  <p>ENFEN declared El Niño Costero alert on February 14, 2026 (Comunicado N°03-2026). The SIOFEN Weekly Bulletin N°09-2026 (Feb 23–Mar 1) reports:</p>
+  <p>• Niño 1+2 weekly anomaly reached <strong style="color:var(--rust)">+1.28°C</strong> — sharply up from the +0.92°C February monthly value currently used in the model</p>
+  <p>• Marine heatwave covering ~130,000 km² within 150 nautical miles of coast</p>
+  <p>• Tropical Surface Waters (ATS) have pushed south to Punta La Negra; Equatorial Surface Waters (AES) to Mórrope — SST anomalies of +5°C near coast</p>
+  <p>• Two warm Kelvin waves forecast: mode 1 arriving March, mode 2 April/May</p>
+  <p>• Southern anchovy available only Mollendo–Morro Sama within 10 nm, with <strong style="color:var(--rust)">predominance of juveniles</strong></p>
+  <p>• IMARPE pre-season hydroacoustic cruise 2602-03 currently underway</p>
+  <p style="font-size:.85rem;color:var(--muted);margin-top:.5rem">The "2017-like" worst case references the El Niño Costero of early 2017, which caused extreme coastal warming and severely disrupted the first season. The current Kelvin wave pattern makes this comparison increasingly relevant.</p>
 </div>
-<p style="color:var(--muted);font-size:.88rem;margin-top:1rem">No proprietary data. No paid APIs. Every input comes from government satellite missions and public climate monitoring.</p>
-</section>
+
+<!-- ═══ TAB: LIMITATIONS ═══ -->
+<div class="tab-panel" id="limitations">
+  <div class="sec-label">Limitations</div>
+  <h2>What the model can and cannot do</h2>
+
+  <h3>Honest about uncertainty</h3>
+  <p>With 32 training samples, the bootstrap 95% confidence interval for the current prediction spans [0.136, 0.738] — a wide range reflecting genuine statistical uncertainty. The model is most reliable at the extremes (SEVERE and LOW tiers) and least discriminating in the middle.</p>
+
+  <h3>Known blind spots</h3>
+  <p>Three historical seasons are consistently misclassified, all for biological rather than oceanographic reasons:</p>
+  <p><strong style="color:var(--rust)">2014 S1</strong> — A subsurface Kelvin wave disrupted the season even though surface SST, chlorophyll, and Niño 1+2 all looked normal. The model cannot see subsurface ocean dynamics. GODAS thermocline depth (Z20) was tested as a feature to address this but failed to improve discrimination — the coastal box-averaged Z20 mostly tracks what SST and Niño already capture.</p>
+  <p><strong style="color:var(--rust)">2022 S2</strong> — 70% juveniles in the catch during a La Niña year with cold surface waters. The disruption was purely biological (stock composition), invisible to satellite remote sensing.</p>
+  <p><strong style="color:var(--rust)">2011 S2</strong> — Stock depletion after heavy fishing. The ocean looked healthy but the fish weren't there in sufficient numbers.</p>
+
+  <h3>Remote sensing ceiling</h3>
+  <p>Satellite-derived features alone likely max out around ROC-AUC 0.65–0.70 for this problem. The path to higher accuracy goes through biological data — particularly the pre-season juvenile percentage from IMARPE hydroacoustic survey cruises, which would directly address the 2022 S2 blind spot. This feature is under active development but requires manual extraction from IMARPE executive reports and PRODUCE resolutions.</p>
+
+  <h3>Chlorophyll latency</h3>
+  <p>The Copernicus NRT chlorophyll product has approximately one month of latency for gap-free L4 data. The current prediction uses a December 2025 proxy value, which is three months stale. This is the single most impactful data refresh available — fresh chlorophyll data would immediately improve prediction confidence.</p>
+
+  <h3>Features tested and rejected</h3>
+  <p>Five candidate features were rigorously tested and rejected during model development:</p>
+  <p>• <strong>is_summer / bio_thresh_pct</strong> — multicollinearity (r = 0.963), dropped during model pruning</p>
+  <p>• <strong>Previous season catch (8 variants)</strong> — anchoveta recover too quickly between seasons for lagged catch to be predictive</p>
+  <p>• <strong>GODAS Z20 thermocline depth</strong> — AUC decreased by 0.025; coastal box Z20 is mostly redundant with SST and Niño 1+2</p>
+  <p>• <strong>Sea level anomaly (SLA)</strong> — promising (+0.051 AUC) but failed bootstrap stability (53%), permutation test (p = 0.115), and hurt S1 predictions specifically</p>
+</div>
+
+<!-- ═══ FOOTER ═══ -->
 <footer>
-<div class="left">Built by Joseph Bell · <a href="https://github.com/monkeqi/paews">View on GitHub</a></div>
-<div class="right">PAEWS v2 · 3-feature logistic regression · 32 seasons · MIT</div>
+  <div class="left">Built by Joseph Bell · <a href="https://github.com/monkeqi/paews">View on GitHub</a></div>
+  <div class="right">PAEWS v2 · 3-feature logistic regression · 32 seasons · MIT License</div>
 </footer>
+
 </div>
+
+<script>
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+</script>
 </body>
 </html>
